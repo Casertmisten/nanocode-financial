@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 /.venv
+
+data/chroma_db/
+.ingested.json
+prompts/
