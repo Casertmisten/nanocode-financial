@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 /.venv
 
-data/chroma_db/
+data
 .ingested.json
-prompts/
 resources/
