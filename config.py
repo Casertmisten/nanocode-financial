@@ -18,6 +18,10 @@ EMBEDDING_API_URL = os.environ.get(
 EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", API_KEY)
 EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "text-embedding-v3")
 
+# --- Reranker API ---
+RERANK_API_URL = os.environ.get("RERANK_API_URL", "")
+RERANK_MODEL = os.environ.get("RERANK_MODEL", "")
+
 # --- RAG Paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOCUMENTS_DIR = os.environ.get(

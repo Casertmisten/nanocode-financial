@@ -11,4 +11,7 @@ dependencies = [
     "llama-index-vector-stores-chroma",
     "chromadb",
     "pymupdf",
+    "gradio>=6.14.0",
+    "rank-bm25>=0.2.2",
+    "jieba>=0.42.1",
 ]
