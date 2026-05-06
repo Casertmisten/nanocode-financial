@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """nanocode-financial - 个人金融智能分析助手"""
 
+import datetime
 import json
 import os
 import re
@@ -104,9 +105,18 @@ def _deep_research_loop(query: str):
 
     report = deep_research.run(query)
 
+    # 保存为 Markdown 文件
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    report_dir = os.path.join(config.BASE_DIR, "reports")
+    os.makedirs(report_dir, exist_ok=True)
+    report_path = os.path.join(report_dir, f"deep_research_{ts}.md")
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(report)
+
     print(f"\n{separator()}")
-    print(render_markdown(report))
+    print(report)
     print(separator())
+    print(f"{config.GREEN}⏺ 报告已保存: {report_path}{config.RESET}")
 
 
 # 斜杠命令注册表
