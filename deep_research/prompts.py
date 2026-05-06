@@ -1,28 +1,18 @@
 """Deep Research 各阶段的 prompt 模板。"""
 
-ANALYZE_PROMPT = """你是专业金融分析师。根据以下检索到的财报数据，撰写【{dimension_name}】分析。
+import os
 
-要求：
-- 数据驱动，引用具体数字和同比变化
-- 指出关键趋势和异常变动
-- 不超过 800 字
-- 如果检索数据中没有相关信息，明确说明"该维度缺乏足够数据"
+_PROMPT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "prompts",
+    "deep_research",
+)
 
-检索数据：
-{chunks}"""
 
-REDUCE_PROMPT = """你是资深金融分析师。根据以下三个维度的分析小结，结合用户的研究需求，生成完整的深度财报分析报告。
+def _load(name: str) -> str:
+    with open(os.path.join(_PROMPT_DIR, name), "r", encoding="utf-8") as f:
+        return f.read().strip()
 
-报告格式要求：
-- 使用以下章节结构：一、财务指标分析 / 二、资产负债分析 / 三、行业与业务分析 / 四、综合评价与风险提示 / 五、数据来源
-- 各维度分析之间要有过渡和呼应
-- 综合评价部分要给出明确的结论性判断
-- 数据来源章节只列出文档名称，不列具体片段
-- 使用 Markdown 格式，关键数字加粗
 
-用户研究需求：{query}
-
-{summaries}
-
-数据来源：
-{sources}"""
+ANALYZE_PROMPT = _load("analyze.txt")
+REDUCE_PROMPT = _load("reduce.txt")
