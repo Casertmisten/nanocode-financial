@@ -7,6 +7,7 @@ import re
 import urllib.request
 
 import config
+import router
 from tools import make_schema, run_tool
 
 
@@ -76,6 +77,11 @@ def main():
                 continue
 
             messages.append({"role": "user", "content": user_input})
+
+            # 路由判断
+            route = router.route_query(user_input)
+            route_label = "深度研究" if route == "deep_research" else "知识问答"
+            print(f"{config.YELLOW}⏺ 路由 → {route_label}{config.RESET}")
 
             # Agentic loop
             while True:
