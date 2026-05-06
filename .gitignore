@@ -6,3 +6,4 @@ __pycache__/
 data/chroma_db/
 .ingested.json
 prompts/
+resources/
