@@ -96,10 +96,17 @@ def _run_agentic_loop(messages, system_prompt):
 
 
 def _deep_research_loop(query: str):
-    """深度研究循环（占位）。"""
+    """深度研究循环。"""
+    import deep_research
+
     print(f"\n{config.YELLOW}⏺ 进入深度研究模式{config.RESET}")
-    print(f"{config.DIM}  研究课题: {query}{config.RESET}")
-    print(f"{config.DIM}  （深度研究功能开发中…）{config.RESET}")
+    print(f"{config.DIM}  研究课题: {query}{config.RESET}\n")
+
+    report = deep_research.run(query)
+
+    print(f"\n{separator()}")
+    print(render_markdown(report))
+    print(separator())
 
 
 # 斜杠命令注册表
