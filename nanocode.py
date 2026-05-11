@@ -96,20 +96,20 @@ def _run_agentic_loop(messages, system_prompt):
         messages.extend(tool_results)
 
 
-def _deep_research_loop(query: str):
-    """深度研究循环。"""
-    import deep_research
+def _financial_report_analysis_loop(query: str):
+    """财报分析循环。"""
+    import financial_report_analysis
 
-    print(f"\n{config.YELLOW}⏺ 进入深度研究模式{config.RESET}")
-    print(f"{config.DIM}  研究课题: {query}{config.RESET}\n")
+    print(f"\n{config.YELLOW}⏺ 进入财报分析模式{config.RESET}")
+    print(f"{config.DIM}  分析课题: {query}{config.RESET}\n")
 
-    report = deep_research.run(query)
+    report = financial_report_analysis.run(query)
 
     # 保存为 Markdown 文件
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     report_dir = os.path.join(config.BASE_DIR, "reports")
     os.makedirs(report_dir, exist_ok=True)
-    report_path = os.path.join(report_dir, f"deep_research_{ts}.md")
+    report_path = os.path.join(report_dir, f"financial_report_{ts}.md")
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)
 
@@ -121,7 +121,7 @@ def _deep_research_loop(query: str):
 
 # 斜杠命令注册表
 _SLASH_COMMANDS = {
-    "/deep_research": _deep_research_loop,
+    "/fra": _financial_report_analysis_loop,
     "/clear": None,  # 内置命令，在 main 中特殊处理
 }
 

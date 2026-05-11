@@ -6,8 +6,8 @@ import urllib.request
 
 import config
 import rag
-from deep_research.prompts import ANALYZE_PROMPT, REDUCE_PROMPT
-from deep_research.template import DIMENSIONS
+from financial_report_analysis.prompts import ANALYZE_PROMPT, REDUCE_PROMPT
+from financial_report_analysis.template import DIMENSIONS
 
 log = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ import os
 _PROMPT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "prompts",
-    "deep_research",
+    "financial_report_analysis",
 )
 
 

@@ -31,6 +31,9 @@ CHROMA_PERSIST_DIR = os.environ.get(
     "CHROMA_PERSIST_DIR", os.path.join(BASE_DIR, "data", "chroma_db")
 )
 
+# --- AKShare 数据源 ---
+AKSHARE_CACHE_TTL = int(os.environ.get("AKSHARE_CACHE_TTL", "3600"))
+
 # --- ANSI colors ---
 RESET, BOLD, DIM = "\033[0m", "\033[1m", "\033[2m"
 BLUE, CYAN, GREEN, YELLOW, RED = (
