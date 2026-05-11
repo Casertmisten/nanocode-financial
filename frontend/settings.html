@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>金融智能分析助手 - 设置</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* --- 设置页面样式 --- */
+
+    .settings-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--stack-lg) calc(var(--stack-lg) * 2);
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .settings-content::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .settings-content::-webkit-scrollbar-thumb {
+      background: var(--color-outline-variant);
+      border-radius: 3px;
+    }
+
+    /* 设置分组 */
+    .settings-section {
+      margin-bottom: var(--stack-lg);
+    }
+
+    .settings-section-title {
+      font: var(--font-body-lg);
+      font-weight: 600;
+      color: var(--color-on-surface);
+      margin-bottom: 4px;
+    }
+
+    .settings-section-desc {
+      font: var(--font-body-md);
+      color: var(--color-on-surface-variant);
+      margin-bottom: var(--stack-md);
+    }
+
+    .settings-card {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-1);
+      overflow: hidden;
+    }
+
+    /* 表单行 */
+    .form-row {
+      display: flex;
+      align-items: center;
+      padding: var(--stack-md) var(--stack-lg);
+      gap: var(--stack-md);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .form-row:last-child {
+      border-bottom: none;
+    }
+
+    .form-label {
+      min-width: 120px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--color-on-surface);
+      flex-shrink: 0;
+    }
+
+    .form-label .label-hint {
+      font-weight: 400;
+      font-size: 12px;
+      color: var(--color-outline);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .form-field {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* 输入框 */
+    .settings-input {
+      width: 100%;
+      padding: 8px var(--stack-md);
+      border: 1px solid var(--color-outline-variant);
+      border-radius: var(--radius);
+      background: var(--color-background);
+      color: var(--color-on-surface);
+      font: var(--font-body-md);
+      transition: all var(--transition-fast);
+    }
+
+    .settings-input::placeholder {
+      color: var(--color-outline);
+    }
+
+    .settings-input:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 2px rgba(0, 35, 111, 0.1);
+    }
+
+    /* 密码输入框 */
+    .password-wrapper {
+      position: relative;
+    }
+
+    .password-wrapper .settings-input {
+      padding-right: 40px;
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-outline);
+      padding: 4px;
+      border-radius: 4px;
+      transition: color var(--transition-fast);
+    }
+
+    .password-toggle:hover {
+      color: var(--color-on-surface);
+    }
+
+    /* 下拉选择框 */
+    .settings-select {
+      width: 100%;
+      padding: 8px var(--stack-md);
+      border: 1px solid var(--color-outline-variant);
+      border-radius: var(--radius);
+      background: var(--color-background);
+      color: var(--color-on-surface);
+      font: var(--font-body-md);
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23757682' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+      transition: all var(--transition-fast);
+    }
+
+    .settings-select:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 2px rgba(0, 35, 111, 0.1);
+      outline: none;
+    }
+
+    /* 滑块 */
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-md);
+    }
+
+    .slider-track {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      background: var(--color-surface-container-high);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .slider-track::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--color-primary);
+      border: 2px solid white;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+      transition: transform var(--transition-fast);
+    }
+
+    .slider-track::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    .slider-value {
+      min-width: 36px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-primary);
+      background: var(--color-primary-fixed);
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+    }
+
+    /* 连接状态 */
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.connected {
+      background: var(--color-success);
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+    }
+
+    .status-dot.disconnected {
+      background: var(--color-outline);
+    }
+
+    .status-dot.error {
+      background: var(--color-danger);
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+    }
+
+    .status-text {
+      color: var(--color-on-surface-variant);
+    }
+
+    .status-text.connected {
+      color: #047857;
+    }
+
+    .status-text.error {
+      color: var(--color-danger);
+    }
+
+    /* 测试按钮 */
+    .btn-test {
+      padding: 6px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--color-outline-variant);
+      color: var(--color-on-surface-variant);
+      background: transparent;
+      transition: all var(--transition-fast);
+      white-space: nowrap;
+    }
+
+    .btn-test:hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+      background: var(--color-primary-fixed);
+    }
+
+    .btn-test.testing {
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    .btn-test.success {
+      border-color: var(--color-success);
+      color: #047857;
+      background: rgba(16, 185, 129, 0.08);
+    }
+
+    .btn-test.fail {
+      border-color: var(--color-danger);
+      color: var(--color-danger);
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    /* 保存栏 */
+    .save-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: var(--stack-lg);
+      padding: var(--stack-md) var(--stack-lg);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-1);
+    }
+
+    .save-hint {
+      font-size: 13px;
+      color: var(--color-on-surface-variant);
+    }
+
+    .save-actions {
+      display: flex;
+      gap: var(--stack-sm);
+    }
+
+    /* Toast 提示 */
+    .toast {
+      position: fixed;
+      bottom: var(--stack-lg);
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      padding: 10px var(--stack-lg);
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: var(--shadow-2);
+      z-index: 200;
+      opacity: 0;
+      transition: all var(--transition);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast-success {
+      background: #047857;
+      color: white;
+    }
+
+    .toast-error {
+      background: var(--color-danger);
+      color: white;
+    }
+
+    /* 模型标签 */
+    .model-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .model-badge-active {
+      background: rgba(16, 185, 129, 0.12);
+      color: #047857;
+    }
+
+    .model-badge-default {
+      background: var(--color-primary-fixed);
+      color: var(--color-primary);
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .settings-content {
+        padding: var(--stack-md);
+      }
+
+      .form-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .form-label {
+        min-width: auto;
+      }
+
+      .save-bar {
+        flex-direction: column;
+        gap: var(--stack-md);
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 移动端遮罩 -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+  <div class="app-layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">FA</div>
+        <span class="sidebar-title">FinAssist</span>
+      </div>
+
+      <div class="sidebar-actions">
+        <button class="btn-new-chat" onclick="window.location.href='chat.html'">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建对话
+        </button>
+      </div>
+
+      <div class="sidebar-section-title">导航</div>
+
+      <ul class="sidebar-list">
+        <li class="sidebar-item" onclick="window.location.href='chat.html'">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="item-text">对话</span>
+        </li>
+        <li class="sidebar-item" onclick="window.location.href='knowledge.html'">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span class="item-text">知识库</span>
+        </li>
+      </ul>
+
+      <!-- 底部导航 -->
+      <nav class="sidebar-nav">
+        <a href="chat.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          对话
+        </a>
+        <a href="knowledge.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          知识库
+        </a>
+        <a href="settings.html" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <!-- 顶部栏 -->
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon btn-hamburger" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="top-bar-title">设置</h1>
+        </div>
+      </div>
+
+      <!-- 设置内容 -->
+      <div class="settings-content">
+
+        <!-- ====== 对话模型 ====== -->
+        <div class="settings-section">
+          <h2 class="settings-section-title">对话模型</h2>
+          <p class="settings-section-desc">配置对话界面使用的 LLM，影响 AI 回复的质量与风格</p>
+
+          <div class="settings-card">
+            <div class="form-row">
+              <div class="form-label">
+                API 提供商
+                <span class="label-hint">选择模型服务提供商</span>
+              </div>
+              <div class="form-field">
+                <select class="settings-select" id="chatProvider" onchange="onProviderChange('chat')">
+                  <option value="ali">阿里 DashScope（通义千问）</option>
+                  <option value="zhipu">智谱 AI（GLM）</option>
+                  <option value="custom">自定义 OpenAI 兼容接口</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                API 地址
+                <span class="label-hint">接口 Base URL</span>
+              </div>
+              <div class="form-field">
+                <input type="text" class="settings-input" id="chatApiUrl"
+                       value="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                       placeholder="https://api.example.com/v1">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                API Key
+                <span class="label-hint">用于身份验证</span>
+              </div>
+              <div class="form-field">
+                <div class="password-wrapper">
+                  <input type="password" class="settings-input" id="chatApiKey"
+                         value="sk-xxxxxxxxxxxxxxxxxxxx"
+                         placeholder="sk-...">
+                  <button class="password-toggle" onclick="togglePassword('chatApiKey', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                模型
+                <span class="label-hint">具体模型版本</span>
+              </div>
+              <div class="form-field">
+                <select class="settings-select" id="chatModel">
+                  <option value="qwen-max">qwen-max（通义千问 Max）</option>
+                  <option value="qwen-plus">qwen-plus（通义千问 Plus）</option>
+                  <option value="qwen-turbo">qwen-turbo（通义千问 Turbo）</option>
+                  <option value="qwen-long">qwen-long（长文本）</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                温度 (Temperature)
+                <span class="label-hint">越高越有创意，越低越精确</span>
+              </div>
+              <div class="form-field">
+                <div class="slider-group">
+                  <input type="range" class="slider-track" id="chatTemp" min="0" max="1" step="0.1" value="0.7"
+                         oninput="document.getElementById('chatTempVal').textContent = this.value">
+                  <span class="slider-value" id="chatTempVal">0.7</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                最大输出长度
+                <span class="label-hint">单次回复最大 token 数</span>
+              </div>
+              <div class="form-field">
+                <div class="slider-group">
+                  <input type="range" class="slider-track" id="chatMaxTokens" min="512" max="8192" step="256" value="4096"
+                         oninput="document.getElementById('chatMaxTokensVal').textContent = this.value">
+                  <span class="slider-value" id="chatMaxTokensVal">4096</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">连接状态</div>
+              <div class="form-field" style="display: flex; align-items: center; gap: var(--stack-md);">
+                <div class="connection-status" id="chatStatus">
+                  <span class="status-dot disconnected"></span>
+                  <span class="status-text">未测试</span>
+                </div>
+                <button class="btn-test" id="chatTestBtn" onclick="testConnection('chat')">测试连接</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== 文档解析模型 ====== -->
+        <div class="settings-section">
+          <h2 class="settings-section-title">文档解析模型</h2>
+          <p class="settings-section-desc">配置用于知识库文档解析、Embedding 生成的模型服务</p>
+
+          <div class="settings-card">
+            <div class="form-row">
+              <div class="form-label">
+                API 提供商
+                <span class="label-hint">解析服务的提供商</span>
+              </div>
+              <div class="form-field">
+                <select class="settings-select" id="parseProvider" onchange="onProviderChange('parse')">
+                  <option value="ali">阿里 DashScope（通义千问）</option>
+                  <option value="zhipu">智谱 AI（GLM）</option>
+                  <option value="custom">自定义 OpenAI 兼容接口</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                API 地址
+                <span class="label-hint">接口 Base URL</span>
+              </div>
+              <div class="form-field">
+                <input type="text" class="settings-input" id="parseApiUrl"
+                       value="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                       placeholder="https://api.example.com/v1">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                API Key
+                <span class="label-hint">与对话模型共用或独立配置</span>
+              </div>
+              <div class="form-field">
+                <div class="password-wrapper">
+                  <input type="password" class="settings-input" id="parseApiKey"
+                         value="sk-xxxxxxxxxxxxxxxxxxxx"
+                         placeholder="sk-...">
+                  <button class="password-toggle" onclick="togglePassword('parseApiKey', this)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                摘要模型
+                <span class="label-hint">用于文档摘要与分段</span>
+              </div>
+              <div class="form-field">
+                <select class="settings-select" id="parseSummaryModel">
+                  <option value="qwen-plus">qwen-plus（推荐，速度快）</option>
+                  <option value="qwen-max">qwen-max（质量高）</option>
+                  <option value="qwen-turbo">qwen-turbo（最快）</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                Embedding 模型
+                <span class="label-hint">用于向量检索的文本编码</span>
+              </div>
+              <div class="form-field">
+                <select class="settings-select" id="parseEmbedModel">
+                  <option value="text-embedding-v3">text-embedding-v3（推荐）</option>
+                  <option value="text-embedding-v2">text-embedding-v2</option>
+                  <option value="text-embedding-v1">text-embedding-v1</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                分块大小
+                <span class="label-hint">每段文本的最大 token 数</span>
+              </div>
+              <div class="form-field">
+                <div class="slider-group">
+                  <input type="range" class="slider-track" id="chunkSize" min="128" max="2048" step="128" value="512"
+                         oninput="document.getElementById('chunkSizeVal').textContent = this.value">
+                  <span class="slider-value" id="chunkSizeVal">512</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                分块重叠
+                <span class="label-hint">相邻块之间的重叠 token 数</span>
+              </div>
+              <div class="form-field">
+                <div class="slider-group">
+                  <input type="range" class="slider-track" id="chunkOverlap" min="0" max="256" step="16" value="64"
+                         oninput="document.getElementById('chunkOverlapVal').textContent = this.value">
+                  <span class="slider-value" id="chunkOverlapVal">64</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">连接状态</div>
+              <div class="form-field" style="display: flex; align-items: center; gap: var(--stack-md);">
+                <div class="connection-status" id="parseStatus">
+                  <span class="status-dot disconnected"></span>
+                  <span class="status-text">未测试</span>
+                </div>
+                <button class="btn-test" id="parseTestBtn" onclick="testConnection('parse')">测试连接</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ====== 通用设置 ====== -->
+        <div class="settings-section">
+          <h2 class="settings-section-title">通用设置</h2>
+          <p class="settings-section-desc">全局偏好配置</p>
+
+          <div class="settings-card">
+            <div class="form-row">
+              <div class="form-label">
+                向量数据库
+                <span class="label-hint">知识库的存储后端</span>
+              </div>
+              <div class="form-field">
+                <select class="settings-select" id="vectorDb">
+                  <option value="chroma">ChromaDB（本地，开箱即用）</option>
+                  <option value="milvus">Milvus（高性能，需部署）</option>
+                  <option value="faiss">FAISS（轻量，纯内存）</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                存储路径
+                <span class="label-hint">数据文件本地保存目录</span>
+              </div>
+              <div class="form-field">
+                <input type="text" class="settings-input" id="storagePath"
+                       value="./data"
+                       placeholder="./data">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-label">
+                HTTPS 代理
+                <span class="label-hint">留空则不使用代理</span>
+              </div>
+              <div class="form-field">
+                <input type="text" class="settings-input" id="httpsProxy"
+                       value=""
+                       placeholder="http://127.0.0.1:7890">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 保存栏 -->
+        <div class="save-bar">
+          <span class="save-hint" id="saveHint">修改后需保存才会生效</span>
+          <div class="save-actions">
+            <button class="btn btn-ghost" onclick="resetSettings()">重置默认</button>
+            <button class="btn btn-primary" onclick="saveSettings()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              保存设置
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast toast-success" id="toast">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    <span id="toastText"></span>
+  </div>
+
+  <script>
+    // --- 提供商配置映射 ---
+    const providerDefaults = {
+      ali: {
+        apiUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        chatModels: [
+          { value: 'qwen-max', label: 'qwen-max（通义千问 Max）' },
+          { value: 'qwen-plus', label: 'qwen-plus（通义千问 Plus）' },
+          { value: 'qwen-turbo', label: 'qwen-turbo（通义千问 Turbo）' },
+          { value: 'qwen-long', label: 'qwen-long（长文本）' },
+        ],
+        summaryModels: [
+          { value: 'qwen-plus', label: 'qwen-plus（推荐，速度快）' },
+          { value: 'qwen-max', label: 'qwen-max（质量高）' },
+          { value: 'qwen-turbo', label: 'qwen-turbo（最快）' },
+        ],
+        embedModels: [
+          { value: 'text-embedding-v3', label: 'text-embedding-v3（推荐）' },
+          { value: 'text-embedding-v2', label: 'text-embedding-v2' },
+          { value: 'text-embedding-v1', label: 'text-embedding-v1' },
+        ],
+      },
+      zhipu: {
+        apiUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        chatModels: [
+          { value: 'glm-4-plus', label: 'glm-4-plus（GLM-4 Plus）' },
+          { value: 'glm-4', label: 'glm-4（GLM-4）' },
+          { value: 'glm-4-flash', label: 'glm-4-flash（GLM-4 Flash）' },
+          { value: 'glm-4-long', label: 'glm-4-long（长文本）' },
+        ],
+        summaryModels: [
+          { value: 'glm-4-flash', label: 'glm-4-flash（推荐，速度快）' },
+          { value: 'glm-4-plus', label: 'glm-4-plus（质量高）' },
+        ],
+        embedModels: [
+          { value: 'embedding-3', label: 'embedding-3（推荐）' },
+          { value: 'embedding-2', label: 'embedding-2' },
+        ],
+      },
+      custom: {
+        apiUrl: '',
+        chatModels: [],
+        summaryModels: [],
+        embedModels: [],
+      },
+    };
+
+    // --- 切换提供商时更新模型列表和 API 地址 ---
+    function onProviderChange(section) {
+      const providerEl = document.getElementById(`${section}Provider`);
+      const provider = providerEl.value;
+      const defaults = providerDefaults[provider];
+      if (!defaults) return;
+
+      // 更新 API 地址
+      const urlEl = document.getElementById(`${section}ApiUrl`);
+      urlEl.value = defaults.apiUrl;
+
+      // 更新模型下拉
+      if (section === 'chat') {
+        updateSelect('chatModel', defaults.chatModels);
+      } else {
+        updateSelect('parseSummaryModel', defaults.summaryModels);
+        updateSelect('parseEmbedModel', defaults.embedModels);
+      }
+
+      markUnsaved();
+    }
+
+    function updateSelect(id, options) {
+      const el = document.getElementById(id);
+      if (!options.length) {
+        el.innerHTML = '<option value="">手动输入模型名称</option>';
+        return;
+      }
+      el.innerHTML = options.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+    }
+
+    // --- 密码显示切换 ---
+    function togglePassword(inputId, btn) {
+      const input = document.getElementById(inputId);
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+      btn.innerHTML = isPassword
+        ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+        : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+    }
+
+    // --- 测试连接 ---
+    function testConnection(section) {
+      const btn = document.getElementById(`${section}TestBtn`);
+      const statusEl = document.getElementById(`${section}Status`);
+
+      btn.classList.add('testing');
+      btn.textContent = '测试中...';
+      statusEl.innerHTML = '<span class="status-dot disconnected"></span><span class="status-text">正在连接...</span>';
+
+      // 模拟测试
+      setTimeout(() => {
+        const success = Math.random() > 0.3;
+        btn.classList.remove('testing');
+
+        if (success) {
+          btn.classList.add('success');
+          btn.textContent = '连接成功';
+          statusEl.innerHTML = '<span class="status-dot connected"></span><span class="status-text connected">已连接</span>';
+        } else {
+          btn.classList.add('fail');
+          btn.textContent = '连接失败';
+          statusEl.innerHTML = '<span class="status-dot error"></span><span class="status-text error">认证失败，请检查 API Key</span>';
+        }
+
+        setTimeout(() => {
+          btn.classList.remove('success', 'fail');
+          btn.textContent = '测试连接';
+        }, 3000);
+      }, 1200 + Math.random() * 800);
+    }
+
+    // --- 保存 ---
+    let hasUnsaved = false;
+
+    function markUnsaved() {
+      if (!hasUnsaved) {
+        hasUnsaved = true;
+        document.getElementById('saveHint').textContent = '● 有未保存的更改';
+        document.getElementById('saveHint').style.color = 'var(--color-primary)';
+      }
+    }
+
+    // 监听所有输入变化
+    document.querySelectorAll('.settings-input, .settings-select, .slider-track').forEach(el => {
+      el.addEventListener('change', markUnsaved);
+      el.addEventListener('input', markUnsaved);
+    });
+
+    function saveSettings() {
+      const config = {
+        chat: {
+          provider: document.getElementById('chatProvider').value,
+          apiUrl: document.getElementById('chatApiUrl').value,
+          apiKey: document.getElementById('chatApiKey').value,
+          model: document.getElementById('chatModel').value,
+          temperature: parseFloat(document.getElementById('chatTemp').value),
+          maxTokens: parseInt(document.getElementById('chatMaxTokens').value),
+        },
+        parse: {
+          provider: document.getElementById('parseProvider').value,
+          apiUrl: document.getElementById('parseApiUrl').value,
+          apiKey: document.getElementById('parseApiKey').value,
+          summaryModel: document.getElementById('parseSummaryModel').value,
+          embedModel: document.getElementById('parseEmbedModel').value,
+          chunkSize: parseInt(document.getElementById('chunkSize').value),
+          chunkOverlap: parseInt(document.getElementById('chunkOverlap').value),
+        },
+        general: {
+          vectorDb: document.getElementById('vectorDb').value,
+          storagePath: document.getElementById('storagePath').value,
+          httpsProxy: document.getElementById('httpsProxy').value,
+        },
+      };
+
+      // 模拟保存（实际应调用后端 API）
+      console.log('保存配置:', config);
+
+      hasUnsaved = false;
+      document.getElementById('saveHint').textContent = '已保存';
+      document.getElementById('saveHint').style.color = 'var(--color-success)';
+      showToast('设置已保存', 'success');
+
+      setTimeout(() => {
+        document.getElementById('saveHint').textContent = '修改后需保存才会生效';
+        document.getElementById('saveHint').style.color = '';
+      }, 3000);
+    }
+
+    function resetSettings() {
+      if (!confirm('确定恢复默认设置？当前未保存的更改将丢失。')) return;
+
+      // 对话模型
+      document.getElementById('chatProvider').value = 'ali';
+      document.getElementById('chatApiUrl').value = providerDefaults.ali.apiUrl;
+      document.getElementById('chatModel').value = 'qwen-max';
+      document.getElementById('chatTemp').value = 0.7;
+      document.getElementById('chatTempVal').textContent = '0.7';
+      document.getElementById('chatMaxTokens').value = 4096;
+      document.getElementById('chatMaxTokensVal').textContent = '4096';
+
+      // 解析模型
+      document.getElementById('parseProvider').value = 'ali';
+      document.getElementById('parseApiUrl').value = providerDefaults.ali.apiUrl;
+      document.getElementById('parseSummaryModel').value = 'qwen-plus';
+      document.getElementById('parseEmbedModel').value = 'text-embedding-v3';
+      document.getElementById('chunkSize').value = 512;
+      document.getElementById('chunkSizeVal').textContent = '512';
+      document.getElementById('chunkOverlap').value = 64;
+      document.getElementById('chunkOverlapVal').textContent = '64';
+
+      // 通用
+      document.getElementById('vectorDb').value = 'chroma';
+      document.getElementById('storagePath').value = './data';
+      document.getElementById('httpsProxy').value = '';
+
+      // 重置状态
+      ['chat', 'parse'].forEach(s => {
+        const statusEl = document.getElementById(`${s}Status`);
+        statusEl.innerHTML = '<span class="status-dot disconnected"></span><span class="status-text">未测试</span>';
+        const btn = document.getElementById(`${s}TestBtn`);
+        btn.classList.remove('success', 'fail');
+        btn.textContent = '测试连接';
+      });
+
+      hasUnsaved = false;
+      document.getElementById('saveHint').textContent = '已重置为默认值';
+      document.getElementById('saveHint').style.color = '';
+      showToast('已恢复默认设置', 'success');
+    }
+
+    // --- Toast ---
+    function showToast(text, type) {
+      const toast = document.getElementById('toast');
+      const toastText = document.getElementById('toastText');
+      toast.className = `toast toast-${type}`;
+      toastText.textContent = text;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    // --- 侧边栏 ---
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('mobileOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>

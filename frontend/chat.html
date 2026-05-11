@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>金融智能分析助手 - 对话</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* --- 对话页面样式 --- */
+
+    /* 聊天区域 */
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .messages-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--stack-lg) calc(var(--stack-lg) * 2);
+    }
+
+    .messages-container::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .messages-container::-webkit-scrollbar-thumb {
+      background: var(--color-outline-variant);
+      border-radius: 3px;
+    }
+
+    /* 欢迎界面 */
+    .welcome-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      padding: var(--stack-lg);
+      text-align: center;
+      gap: var(--stack-lg);
+    }
+
+    .welcome-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: var(--radius-xl);
+      background: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 8px 32px rgba(0, 35, 111, 0.2);
+    }
+
+    .welcome-title {
+      font: var(--font-headline-lg);
+      font-size: 28px;
+      color: var(--color-on-surface);
+    }
+
+    .welcome-desc {
+      font: var(--font-body-md);
+      color: var(--color-on-surface-variant);
+      max-width: 480px;
+      line-height: 1.7;
+    }
+
+    .welcome-suggestions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--stack-md);
+      max-width: 600px;
+      width: 100%;
+    }
+
+    .suggestion-card {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--stack-sm);
+      padding: var(--stack-md);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface-container-lowest);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      text-align: left;
+    }
+
+    .suggestion-card:hover {
+      border-color: var(--color-primary);
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-1px);
+    }
+
+    .suggestion-card svg {
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: var(--color-primary);
+    }
+
+    .suggestion-text {
+      font-size: 13px;
+      color: var(--color-on-surface-variant);
+      line-height: 1.5;
+    }
+
+    /* 消息气泡 */
+    .message {
+      display: flex;
+      gap: var(--stack-md);
+      margin-bottom: var(--stack-lg);
+      max-width: 760px;
+      animation: messageIn 0.3s ease-out;
+    }
+
+    @keyframes messageIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .message-user {
+      flex-direction: row-reverse;
+      margin-left: auto;
+    }
+
+    .message-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .message-user .message-avatar {
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+    }
+
+    .message-assistant .message-avatar {
+      background: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
+      color: white;
+    }
+
+    .message-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-content {
+      padding: var(--stack-md) var(--stack-md);
+      border-radius: var(--radius-md);
+      font: var(--font-body-md);
+      line-height: 1.7;
+      word-wrap: break-word;
+    }
+
+    .message-user .message-content {
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+      border-bottom-right-radius: var(--radius-sm);
+    }
+
+    .message-assistant .message-content {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-bottom-left-radius: var(--radius-sm);
+      border-left: 3px solid var(--color-success);
+    }
+
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      margin-top: 6px;
+      font: var(--font-caption);
+      color: var(--color-outline);
+    }
+
+    .message-user .message-meta {
+      justify-content: flex-end;
+    }
+
+    .message-actions {
+      display: flex;
+      gap: 4px;
+      margin-top: 8px;
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+    }
+
+    .message:hover .message-actions {
+      opacity: 1;
+    }
+
+    .message-action-btn {
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--color-on-surface-variant);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all var(--transition-fast);
+    }
+
+    .message-action-btn:hover {
+      background: var(--color-surface-container);
+      color: var(--color-on-surface);
+    }
+
+    /* 打字指示器 */
+    .typing-indicator {
+      display: flex;
+      gap: var(--stack-md);
+      margin-bottom: var(--stack-lg);
+      max-width: 760px;
+    }
+
+    .typing-dots {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: var(--stack-md);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      border-left: 3px solid var(--color-success);
+    }
+
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-outline);
+      animation: typingBounce 1.4s ease-in-out infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+
+    /* 输入区域 */
+    .chat-input-area {
+      padding: var(--stack-md) calc(var(--stack-lg) * 2) var(--stack-lg);
+      background: var(--color-background);
+    }
+
+    .chat-input-wrapper {
+      max-width: 760px;
+      margin: 0 auto;
+      display: flex;
+      align-items: flex-end;
+      gap: var(--stack-sm);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-outline-variant);
+      border-radius: var(--radius-md);
+      padding: var(--stack-sm) var(--stack-sm) var(--stack-sm) var(--stack-md);
+      transition: all var(--transition-fast);
+    }
+
+    .chat-input-wrapper:focus-within {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 2px rgba(0, 35, 111, 0.1);
+    }
+
+    .chat-input {
+      flex: 1;
+      resize: none;
+      min-height: 24px;
+      max-height: 120px;
+      padding: 6px 0;
+      font: var(--font-body-md);
+      line-height: 1.5;
+    }
+
+    .chat-input::placeholder {
+      color: var(--color-outline);
+    }
+
+    .btn-send {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all var(--transition-fast);
+    }
+
+    .btn-send:hover {
+      background: var(--color-primary-container);
+    }
+
+    .btn-send:disabled {
+      background: var(--color-surface-container);
+      color: var(--color-outline);
+      cursor: default;
+    }
+
+    /* 工具栏（知识库/模型选择） */
+    .chat-toolbar {
+      max-width: 760px;
+      margin: var(--stack-sm) auto 0;
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      position: relative;
+    }
+
+    .toolbar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--color-on-surface-variant);
+      background: var(--color-surface-container);
+      transition: all var(--transition-fast);
+      cursor: pointer;
+    }
+
+    .toolbar-btn:hover {
+      background: var(--color-surface-container-high);
+      color: var(--color-on-surface);
+    }
+
+    .toolbar-btn.active {
+      background: var(--color-primary-fixed);
+      color: var(--color-primary);
+    }
+
+    .toolbar-btn svg {
+      flex-shrink: 0;
+    }
+
+    /* 已选标签 */
+    .selected-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 1px 6px;
+      border-radius: var(--radius-full);
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 16px;
+    }
+
+    /* 知识库弹出面板 */
+    .kb-panel {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      width: 320px;
+      max-height: 360px;
+      margin-bottom: 8px;
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-2);
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(4px);
+      transition: all var(--transition-fast);
+      z-index: 20;
+      overflow: hidden;
+    }
+
+    .kb-panel.active {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .kb-panel-search {
+      padding: var(--stack-sm);
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .kb-panel-search input {
+      width: 100%;
+      padding: 6px 10px 6px 32px;
+      border: 1px solid var(--color-outline-variant);
+      border-radius: var(--radius);
+      font-size: 13px;
+      background: var(--color-surface-container-low);
+      transition: all var(--transition-fast);
+    }
+
+    .kb-panel-search input:focus {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 2px rgba(0, 35, 111, 0.1);
+    }
+
+    .kb-panel-search .search-icon {
+      position: absolute;
+      left: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--color-outline);
+      pointer-events: none;
+    }
+
+    .kb-panel-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--stack-sm);
+    }
+
+    .kb-panel-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .kb-panel-list::-webkit-scrollbar-thumb {
+      background: var(--color-outline-variant);
+      border-radius: 2px;
+    }
+
+    .kb-item {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background var(--transition-fast);
+    }
+
+    .kb-item:hover {
+      background: var(--color-surface-container);
+    }
+
+    .kb-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--color-primary);
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .kb-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .kb-item-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-on-surface);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .kb-item-meta {
+      font-size: 11px;
+      color: var(--color-outline);
+      margin-top: 1px;
+    }
+
+    /* 模型选择面板 */
+    .model-panel {
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      width: 240px;
+      margin-bottom: 8px;
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-2);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(4px);
+      transition: all var(--transition-fast);
+      z-index: 20;
+      overflow: hidden;
+    }
+
+    .model-panel.active {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .model-panel-title {
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-outline);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .model-option {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background var(--transition-fast);
+      font-size: 13px;
+      color: var(--color-on-surface-variant);
+    }
+
+    .model-option:hover {
+      background: var(--color-surface-container);
+    }
+
+    .model-option.selected {
+      color: var(--color-primary);
+      font-weight: 500;
+    }
+
+    .model-option .model-check {
+      width: 16px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .model-option .model-name {
+      flex: 1;
+    }
+
+    .model-option .model-provider {
+      font-size: 11px;
+      color: var(--color-outline);
+    }
+
+    .chat-input-hint {
+      text-align: center;
+      font: var(--font-caption);
+      color: var(--color-outline);
+      margin-top: var(--stack-sm);
+      max-width: 760px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* 移动端汉堡按钮 */
+    .btn-hamburger {
+      display: none;
+    }
+
+    @media (max-width: 768px) {
+      .btn-hamburger {
+        display: flex;
+      }
+
+      .messages-container {
+        padding: var(--stack-md);
+      }
+
+      .chat-input-area {
+        padding: var(--stack-md);
+      }
+
+      .welcome-suggestions {
+        grid-template-columns: 1fr;
+      }
+
+      .kb-panel, .model-panel {
+        width: calc(100vw - 32px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 移动端遮罩 -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+  <div class="app-layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">FA</div>
+        <span class="sidebar-title">FinAssist</span>
+      </div>
+
+      <div class="sidebar-actions">
+        <button class="btn-new-chat" onclick="newChat()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建对话
+        </button>
+      </div>
+
+      <div class="sidebar-section-title">近期对话</div>
+
+      <ul class="sidebar-list" id="chatList">
+        <li class="sidebar-item active" data-id="1">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="item-text">贵州茅台 2024 年报分析</span>
+          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(1)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </li>
+        <li class="sidebar-item" data-id="2">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="item-text">新能源板块近期走势</span>
+          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(2)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </li>
+        <li class="sidebar-item" data-id="3">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="item-text">央行降准对债市的影响</span>
+          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(3)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </li>
+        <li class="sidebar-item" data-id="4">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="item-text">沪深300估值分析</span>
+          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(4)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </li>
+      </ul>
+
+      <!-- 底部导航 -->
+      <nav class="sidebar-nav">
+        <a href="chat.html" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          对话
+        </a>
+        <a href="knowledge.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          知识库
+        </a>
+        <a href="settings.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <!-- 顶部栏 -->
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon btn-hamburger" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="top-bar-title">贵州茅台 2024 年报分析</h1>
+        </div>
+      </div>
+
+      <!-- 聊天区域 -->
+      <div class="chat-area" id="chatArea">
+        <!-- 默认显示欢迎界面 -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="welcome-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <h2 class="welcome-title">金融智能分析助手</h2>
+          <p class="welcome-desc">我可以帮你分析财报、解读市场动态、提供个股研究。基于你的知识库和实时数据进行智能分析。</p>
+
+          <div class="welcome-suggestions">
+            <div class="suggestion-card" onclick="sendSuggestion('分析贵州茅台最新年报的营收增长趋势')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              <span class="suggestion-text">分析贵州茅台最新年报的营收增长趋势</span>
+            </div>
+            <div class="suggestion-card" onclick="sendSuggestion('对比宁德时代和比亚迪的毛利率变化')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+              <span class="suggestion-text">对比宁德时代和比亚迪的毛利率变化</span>
+            </div>
+            <div class="suggestion-card" onclick="sendSuggestion('总结今天A股市场的主要热点板块')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span class="suggestion-text">总结今天A股市场的主要热点板块</span>
+            </div>
+            <div class="suggestion-card" onclick="sendSuggestion('解读央行最新货币政策对债券市场的影响')">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              <span class="suggestion-text">解读央行最新货币政策对债券市场的影响</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 消息列表（默认隐藏，有对话时显示） -->
+        <div class="messages-container" id="messagesContainer" style="display: none;"></div>
+      </div>
+
+      <!-- 输入区域 -->
+      <div class="chat-input-area">
+        <div class="chat-input-wrapper">
+          <textarea class="chat-input" id="chatInput" rows="1" placeholder="输入你的金融分析问题..." onkeydown="handleInputKey(event)" oninput="autoResize(this)"></textarea>
+          <button class="btn-send" id="btnSend" onclick="sendMessage()" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+
+        <!-- 工具栏：知识库 & 模型选择 -->
+        <div class="chat-toolbar">
+          <!-- 知识库选择 -->
+          <button class="toolbar-btn" id="btnKb" onclick="togglePanel('kb')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span>知识库</span>
+            <span class="selected-tag" id="kbCount" style="display:none">0</span>
+          </button>
+          <!-- 模型选择 -->
+          <button class="toolbar-btn" id="btnModel" onclick="togglePanel('model')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span id="currentModelName">Qwen-Max</span>
+          </button>
+
+          <!-- 知识库弹出面板 -->
+          <div class="kb-panel" id="kbPanel">
+            <div class="kb-panel-search" style="position:relative">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="搜索知识库..." id="kbSearch" oninput="filterKbList()">
+            </div>
+            <div class="kb-panel-list" id="kbList"></div>
+          </div>
+
+          <!-- 模型选择面板 -->
+          <div class="model-panel" id="modelPanel">
+            <div class="model-panel-title">选择模型</div>
+            <div id="modelList"></div>
+          </div>
+        </div>
+
+        <p class="chat-input-hint">模型基于知识库和公开数据生成，仅供参考，不构成投资建议</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // --- 状态管理 ---
+    let messages = [];
+    let isLoading = false;
+    let currentChatId = 1;
+    let selectedKbIds = new Set();
+    let currentModel = 'qwen-max';
+
+    // --- 模拟数据 ---
+    const knowledgeBases = [
+      { id: 1, name: 'A股上市公司年报', docs: 128, updated: '2025-01-10' },
+      { id: 2, name: '券商研报精选', docs: 256, updated: '2025-01-15' },
+      { id: 3, name: '宏观经济数据', docs: 64, updated: '2025-01-08' },
+      { id: 4, name: '行业政策法规', docs: 89, updated: '2024-12-20' },
+      { id: 5, name: '基金持仓分析', docs: 45, updated: '2025-01-12' },
+      { id: 6, name: '港股财报数据', docs: 72, updated: '2025-01-05' },
+      { id: 7, name: '期货市场分析', docs: 38, updated: '2024-11-30' },
+      { id: 8, name: '债券市场研究', docs: 53, updated: '2024-12-15' },
+    ];
+
+    const models = [
+      { id: 'qwen-max', name: 'Qwen-Max', provider: '阿里' },
+      { id: 'qwen-plus', name: 'Qwen-Plus', provider: '阿里' },
+      { id: 'qwen-turbo', name: 'Qwen-Turbo', provider: '阿里' },
+      { id: 'glm-4-plus', name: 'GLM-4-Plus', provider: '智谱' },
+      { id: 'glm-4-flash', name: 'GLM-4-Flash', provider: '智谱' },
+      { id: 'deepseek-v3', name: 'DeepSeek-V3', provider: 'DeepSeek' },
+    ];
+
+    // --- DOM 引用 ---
+    const chatInput = document.getElementById('chatInput');
+    const btnSend = document.getElementById('btnSend');
+    const messagesContainer = document.getElementById('messagesContainer');
+    const welcomeScreen = document.getElementById('welcomeScreen');
+    const chatList = document.getElementById('chatList');
+
+    // --- 输入处理 ---
+    chatInput.addEventListener('input', () => {
+      btnSend.disabled = chatInput.value.trim() === '';
+    });
+
+    function handleInputKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (chatInput.value.trim()) sendMessage();
+      }
+    }
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    // --- 发送消息 ---
+    function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text || isLoading) return;
+
+      // 隐藏欢迎界面
+      welcomeScreen.style.display = 'none';
+      messagesContainer.style.display = 'block';
+
+      addMessage('user', text);
+      chatInput.value = '';
+      chatInput.style.height = 'auto';
+      btnSend.disabled = true;
+
+      // 模拟AI回复
+      simulateReply(text);
+    }
+
+    function sendSuggestion(text) {
+      chatInput.value = text;
+      sendMessage();
+    }
+
+    function addMessage(role, content) {
+      messages.push({ role, content, time: new Date() });
+      renderMessages();
+      scrollToBottom();
+    }
+
+    function renderMessages() {
+      messagesContainer.innerHTML = messages.map(msg => {
+        const time = msg.time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        if (msg.role === 'user') {
+          return `
+            <div class="message message-user">
+              <div class="message-avatar">我</div>
+              <div class="message-body">
+                <div class="message-content">${escapeHtml(msg.content)}</div>
+                <div class="message-meta"><span>${time}</span></div>
+              </div>
+            </div>`;
+        }
+        return `
+          <div class="message message-assistant">
+            <div class="message-avatar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <div class="message-body">
+              <div class="message-content">${msg.content}</div>
+              <div class="message-meta">
+                <span>${time}</span>
+              </div>
+              <div class="message-actions">
+                <button class="message-action-btn" onclick="copyMessage(this, '${escapeAttr(msg.content)}')">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  复制
+                </button>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function simulateReply(userText) {
+      isLoading = true;
+
+      // 显示打字指示器
+      const typingEl = document.createElement('div');
+      typingEl.className = 'typing-indicator';
+      typingEl.id = 'typingIndicator';
+      typingEl.innerHTML = `
+        <div class="message-avatar" style="background: linear-gradient(135deg, var(--color-primary), var(--color-primary-container)); color: white;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg>
+        </div>
+        <div class="typing-dots"><span></span><span></span><span></span></div>`;
+      messagesContainer.appendChild(typingEl);
+      scrollToBottom();
+
+      // 模拟延迟后回复
+      setTimeout(() => {
+        typingEl.remove();
+        const reply = generateMockReply(userText);
+        addMessage('assistant', reply);
+        isLoading = false;
+      }, 1500 + Math.random() * 1000);
+    }
+
+    function generateMockReply(text) {
+      const replies = [
+        `根据我的分析，以下是关于该问题的回答：<br><br><strong>核心观点：</strong>从当前市场数据来看，该标的整体表现稳健。以下是我的详细分析：<br><br>1. <strong>营收方面</strong>：同比增长 12.3%，超出市场预期。主要驱动力来自主营业务的持续扩张。<br>2. <strong>利润率</strong>：毛利率保持在 45% 以上，净利率约 22%，在同行业中处于领先地位。<br>3. <strong>现金流</strong>：经营性现金流充裕，资产负债率控制在合理范围内。<br><br><em>数据来源：公司年报、Wind 金融终端</em>`,
+        `基于知识库中的研报和最新市场数据，我的分析如下：<br><br><strong>市场概览：</strong>当前市场呈现结构性分化格局。大盘蓝筹相对稳健，中小盘波动加大。<br><br>从<strong>技术面</strong>来看，主要指数处于关键支撑位附近，成交量有所放大。从<strong>基本面</strong>来看，企业盈利增速边际改善，但需关注以下风险：<br><br>- 宏观经济下行压力<br>- 地缘政治不确定性<br>- 流动性环境变化<br><br><em>以上分析仅供参考，不构成投资建议。</em>`,
+      ];
+      return replies[Math.floor(Math.random() * replies.length)];
+    }
+
+    // --- 对话管理 ---
+    function newChat() {
+      messages = [];
+      messagesContainer.innerHTML = '';
+      welcomeScreen.style.display = 'flex';
+      messagesContainer.style.display = 'none';
+
+      // 取消所有活跃项
+      chatList.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      document.querySelector('.top-bar-title').textContent = '新对话';
+    }
+
+    function deleteChat(id) {
+      const item = chatList.querySelector(`[data-id="${id}"]`);
+      if (item) {
+        item.style.transition = 'all 0.2s ease';
+        item.style.opacity = '0';
+        item.style.transform = 'translateX(-10px)';
+        setTimeout(() => item.remove(), 200);
+      }
+    }
+
+    // 切换对话
+    chatList.addEventListener('click', (e) => {
+      const item = e.target.closest('.sidebar-item');
+      if (!item) return;
+
+      chatList.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+      document.querySelector('.top-bar-title').textContent = item.querySelector('.item-text').textContent;
+
+      // 模拟加载历史对话
+      messages = [];
+      welcomeScreen.style.display = 'none';
+      messagesContainer.style.display = 'block';
+      messagesContainer.innerHTML = '';
+
+      const saved = [
+        { role: 'user', content: '请分析贵州茅台2024年年报的核心财务数据', time: new Date(Date.now() - 3600000) },
+        { role: 'assistant', content: '根据贵州茅台2024年年报数据，核心指标如下：<br><br><strong>营收：</strong>1,741.4亿元，同比+15.7%<br><strong>归母净利：</strong>862.3亿元，同比+13.2%<br><strong>毛利率：</strong>91.5%，同比+0.3pp<br><strong>ROE：</strong>33.8%，保持行业领先<br><br>整体来看，茅台延续了高增长态势，直销渠道占比提升是核心驱动因素。', time: new Date(Date.now() - 3590000) },
+      ];
+      messages = saved;
+      renderMessages();
+      scrollToBottom();
+
+      // 移动端关闭侧边栏
+      if (window.innerWidth <= 768) toggleSidebar();
+    });
+
+    // --- 工具函数 ---
+    function scrollToBottom() {
+      requestAnimationFrame(() => {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+      return str.replace(/'/g, "\\'").replace(/\n/g, '\\n');
+    }
+
+    function copyMessage(btn, text) {
+      navigator.clipboard.writeText(text.replace(/<[^>]*>/g, '')).then(() => {
+        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已复制`;
+        setTimeout(() => {
+          btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> 复制`;
+        }, 1500);
+      });
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('mobileOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    // --- 知识库 & 模型面板 ---
+    function togglePanel(type) {
+      const kbPanel = document.getElementById('kbPanel');
+      const modelPanel = document.getElementById('modelPanel');
+      const btnKb = document.getElementById('btnKb');
+      const btnModel = document.getElementById('btnModel');
+
+      if (type === 'kb') {
+        const isActive = kbPanel.classList.contains('active');
+        closeAllPanels();
+        if (!isActive) {
+          kbPanel.classList.add('active');
+          btnKb.classList.add('active');
+        }
+      } else {
+        const isActive = modelPanel.classList.contains('active');
+        closeAllPanels();
+        if (!isActive) {
+          modelPanel.classList.add('active');
+          btnModel.classList.add('active');
+        }
+      }
+    }
+
+    function closeAllPanels() {
+      document.getElementById('kbPanel').classList.remove('active');
+      document.getElementById('modelPanel').classList.remove('active');
+      document.getElementById('btnKb').classList.remove('active');
+      document.getElementById('btnModel').classList.remove('active');
+    }
+
+    // 点击外部关闭面板
+    document.addEventListener('click', (e) => {
+      const toolbar = document.querySelector('.chat-toolbar');
+      if (toolbar && !toolbar.contains(e.target)) {
+        closeAllPanels();
+      }
+    });
+
+    // --- 知识库列表渲染 ---
+    function renderKbList(filter = '') {
+      const list = document.getElementById('kbList');
+      const keyword = filter.toLowerCase();
+      const filtered = knowledgeBases.filter(kb =>
+        kb.name.toLowerCase().includes(keyword)
+      );
+
+      if (filtered.length === 0) {
+        list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--color-outline);font-size:13px;">未找到匹配的知识库</div>';
+        return;
+      }
+
+      list.innerHTML = filtered.map(kb => `
+        <label class="kb-item">
+          <input type="checkbox" value="${kb.id}" ${selectedKbIds.has(kb.id) ? 'checked' : ''} onchange="toggleKb(${kb.id})">
+          <div class="kb-item-info">
+            <div class="kb-item-name">${kb.name}</div>
+            <div class="kb-item-meta">${kb.docs} 文档 · 更新于 ${kb.updated}</div>
+          </div>
+        </label>
+      `).join('');
+    }
+
+    function toggleKb(id) {
+      if (selectedKbIds.has(id)) {
+        selectedKbIds.delete(id);
+      } else {
+        selectedKbIds.add(id);
+      }
+      updateKbCount();
+    }
+
+    function updateKbCount() {
+      const countEl = document.getElementById('kbCount');
+      const count = selectedKbIds.size;
+      if (count > 0) {
+        countEl.textContent = count;
+        countEl.style.display = 'inline-flex';
+      } else {
+        countEl.style.display = 'none';
+      }
+    }
+
+    function filterKbList() {
+      const keyword = document.getElementById('kbSearch').value;
+      renderKbList(keyword);
+    }
+
+    // --- 模型列表渲染 ---
+    function renderModelList() {
+      const list = document.getElementById('modelList');
+      list.innerHTML = models.map(m => `
+        <div class="model-option ${m.id === currentModel ? 'selected' : ''}" onclick="selectModel('${m.id}')">
+          <span class="model-check">${m.id === currentModel ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
+          <span class="model-name">${m.name}</span>
+          <span class="model-provider">${m.provider}</span>
+        </div>
+      `).join('');
+    }
+
+    function selectModel(id) {
+      currentModel = id;
+      const model = models.find(m => m.id === id);
+      document.getElementById('currentModelName').textContent = model.name;
+      renderModelList();
+      closeAllPanels();
+    }
+
+    // --- 初始化 ---
+    renderKbList();
+    renderModelList();
+  </script>
+</body>
+</html>

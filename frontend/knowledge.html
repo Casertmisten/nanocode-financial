@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>金融智能分析助手 - 知识库</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* --- 知识库页面样式 --- */
+
+    /* 内容区 */
+    .knowledge-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--stack-lg) calc(var(--stack-lg) * 2);
+    }
+
+    .knowledge-content::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .knowledge-content::-webkit-scrollbar-thumb {
+      background: var(--color-outline-variant);
+      border-radius: 3px;
+    }
+
+    /* 统计卡片 */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--stack-md);
+      margin-bottom: var(--stack-lg);
+    }
+
+    .stat-card {
+      padding: var(--stack-md) var(--stack-md);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-1);
+      transition: all var(--transition);
+    }
+
+    .stat-card:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    .stat-label {
+      font: var(--font-label-md);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--color-on-surface-variant);
+      margin-bottom: var(--stack-sm);
+    }
+
+    .stat-value {
+      font: var(--font-headline-md);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--color-on-surface);
+      line-height: 1.2;
+    }
+
+    .stat-card:nth-child(1) .stat-value { color: var(--color-primary); }
+    .stat-card:nth-child(2) .stat-value { color: var(--color-success); }
+    .stat-card:nth-child(3) .stat-value { color: #b45309; }
+    .stat-card:nth-child(4) .stat-value { color: var(--color-on-surface); }
+
+    .stat-change {
+      font: var(--font-caption);
+      margin-top: 4px;
+      color: var(--color-success);
+    }
+
+    /* 工具栏 */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--stack-md);
+      margin-bottom: var(--stack-lg);
+      flex-wrap: wrap;
+    }
+
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-md);
+      flex-wrap: wrap;
+    }
+
+    .filter-tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--color-surface-container);
+      padding: 3px;
+      border-radius: var(--radius);
+    }
+
+    .filter-tab {
+      padding: 6px 14px;
+      border-radius: calc(var(--radius) - 2px);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-on-surface-variant);
+      transition: all var(--transition-fast);
+    }
+
+    .filter-tab:hover {
+      color: var(--color-on-surface);
+    }
+
+    .filter-tab.active {
+      background: var(--color-surface-container-lowest);
+      color: var(--color-primary);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    /* 文档网格 */
+    .docs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: var(--stack-md);
+    }
+
+    /* 文档卡片 */
+    .doc-card {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-1);
+      transition: all var(--transition);
+      cursor: pointer;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .doc-card:hover {
+      border-color: var(--color-primary);
+      box-shadow: var(--shadow-hover);
+      transform: translateY(-2px);
+    }
+
+    .doc-card-header {
+      padding: var(--stack-md) var(--stack-md) var(--stack-sm);
+      display: flex;
+      align-items: flex-start;
+      gap: var(--stack-sm);
+    }
+
+    .doc-type-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .doc-type-pdf {
+      background: rgba(239, 68, 68, 0.1);
+      color: #dc2626;
+    }
+
+    .doc-type-report {
+      background: rgba(0, 35, 111, 0.08);
+      color: var(--color-primary);
+    }
+
+    .doc-type-news {
+      background: rgba(16, 185, 129, 0.1);
+      color: #047857;
+    }
+
+    .doc-type-data {
+      background: rgba(180, 83, 9, 0.1);
+      color: #b45309;
+    }
+
+    .doc-card-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .doc-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-on-surface);
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .doc-card-source {
+      font: var(--font-caption);
+      color: var(--color-on-surface-variant);
+    }
+
+    .doc-card-body {
+      padding: 0 var(--stack-md) var(--stack-sm);
+      flex: 1;
+    }
+
+    .doc-card-desc {
+      font-size: 13px;
+      color: var(--color-on-surface-variant);
+      line-height: 1.6;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .doc-card-footer {
+      padding: var(--stack-sm) var(--stack-md) var(--stack-md);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--stack-sm);
+    }
+
+    .doc-card-meta {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      font: var(--font-caption);
+      color: var(--color-outline);
+    }
+
+    .doc-card-meta svg {
+      flex-shrink: 0;
+    }
+
+    .doc-card-tags {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .doc-card-actions {
+      display: flex;
+      gap: 2px;
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+    }
+
+    .doc-card:hover .doc-card-actions {
+      opacity: 1;
+    }
+
+    .doc-action-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-on-surface-variant);
+      transition: all var(--transition-fast);
+    }
+
+    .doc-action-btn:hover {
+      background: var(--color-surface-container);
+      color: var(--color-on-surface);
+    }
+
+    .doc-action-btn.danger:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--color-danger);
+    }
+
+    /* 上传区域 */
+    .upload-zone {
+      border: 2px dashed var(--color-outline-variant);
+      border-radius: var(--radius-lg);
+      padding: var(--stack-lg) var(--stack-lg);
+      text-align: center;
+      transition: all var(--transition);
+      cursor: pointer;
+      margin-bottom: var(--stack-lg);
+    }
+
+    .upload-zone:hover,
+    .upload-zone.dragover {
+      border-color: var(--color-primary);
+      background: rgba(0, 35, 111, 0.03);
+    }
+
+    .upload-zone-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius);
+      background: var(--color-surface-container);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto var(--stack-md);
+      color: var(--color-outline);
+    }
+
+    .upload-zone-text {
+      font-size: 14px;
+      color: var(--color-on-surface);
+      margin-bottom: 4px;
+    }
+
+    .upload-zone-text strong {
+      color: var(--color-primary);
+    }
+
+    .upload-zone-hint {
+      font: var(--font-caption);
+      color: var(--color-outline);
+    }
+
+    /* 上传进度 */
+    .upload-progress {
+      display: none;
+      margin-bottom: var(--stack-lg);
+    }
+
+    .upload-progress.active {
+      display: block;
+    }
+
+    .upload-item {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-md);
+      padding: var(--stack-sm) var(--stack-md);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      margin-bottom: var(--stack-sm);
+      animation: messageIn 0.3s ease-out;
+    }
+
+    @keyframes messageIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .upload-item-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      background: var(--color-surface-container);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .upload-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .upload-item-name {
+      font-size: 13px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .upload-item-status {
+      font: var(--font-caption);
+      color: var(--color-on-surface-variant);
+    }
+
+    .upload-progress-bar {
+      height: 3px;
+      background: var(--color-surface-container);
+      border-radius: 2px;
+      margin-top: 6px;
+      overflow: hidden;
+    }
+
+    .upload-progress-fill {
+      height: 100%;
+      background: var(--color-primary);
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .upload-progress-fill.complete {
+      background: var(--color-success);
+    }
+
+    /* 空状态 */
+    .empty-state {
+      padding: 80px var(--stack-lg);
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      .stats-row {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .knowledge-content {
+        padding: var(--stack-md);
+      }
+
+      .docs-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .toolbar-left {
+        flex-direction: column;
+      }
+
+      .search-box {
+        max-width: none;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .stats-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 移动端遮罩 -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+  <div class="app-layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">FA</div>
+        <span class="sidebar-title">FinAssist</span>
+      </div>
+
+      <div class="sidebar-actions">
+        <button class="btn-new-chat" onclick="window.location.href='chat.html'">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建对话
+        </button>
+      </div>
+
+      <div class="sidebar-section-title">知识库分类</div>
+
+      <ul class="sidebar-list" id="categoryList">
+        <li class="sidebar-item active" data-filter="all" onclick="filterByCategory(this, 'all')">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="item-text">全部文档</span>
+        </li>
+        <li class="sidebar-item" data-filter="report" onclick="filterByCategory(this, 'report')">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="item-text">研究报告</span>
+        </li>
+        <li class="sidebar-item" data-filter="financial" onclick="filterByCategory(this, 'financial')">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span class="item-text">财报数据</span>
+        </li>
+        <li class="sidebar-item" data-filter="news" onclick="filterByCategory(this, 'news')">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1m2 13a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2v10a2 2 0 0 1-2 2z"/></svg>
+          <span class="item-text">金融新闻</span>
+        </li>
+        <li class="sidebar-item" data-filter="policy" onclick="filterByCategory(this, 'policy')">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span class="item-text">政策法规</span>
+        </li>
+      </ul>
+
+      <!-- 底部导航 -->
+      <nav class="sidebar-nav">
+        <a href="chat.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          对话
+        </a>
+        <a href="knowledge.html" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          知识库
+        </a>
+        <a href="settings.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <!-- 顶部栏 -->
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon btn-hamburger" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="top-bar-title">知识库</h1>
+        </div>
+        <div class="top-bar-right">
+        </div>
+      </div>
+
+      <!-- 知识库内容 -->
+      <div class="knowledge-content">
+        <!-- 统计卡片 -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">文档总数</div>
+            <div class="stat-value">128</div>
+            <div class="stat-change">+12 本周新增</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">已解析</div>
+            <div class="stat-value">115</div>
+            <div class="stat-change">解析率 89.8%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">待处理</div>
+            <div class="stat-value">13</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">知识片段</div>
+            <div class="stat-value">2,847</div>
+            <div class="stat-change">+234 本周</div>
+          </div>
+        </div>
+
+        <!-- 工具栏 -->
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="search-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" class="input-field" placeholder="搜索文档标题、关键词..." id="searchInput" oninput="filterDocs()">
+            </div>
+            <div class="filter-tabs" id="filterTabs">
+              <button class="filter-tab active" data-type="all" onclick="filterByType(this, 'all')">全部</button>
+              <button class="filter-tab" data-type="report" onclick="filterByType(this, 'report')">研报</button>
+              <button class="filter-tab" data-type="financial" onclick="filterByType(this, 'financial')">财报</button>
+              <button class="filter-tab" data-type="news" onclick="filterByType(this, 'news')">新闻</button>
+              <button class="filter-tab" data-type="policy" onclick="filterByType(this, 'policy')">政策</button>
+            </div>
+            <button class="btn btn-primary" onclick="openUploadModal()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              上传文档
+            </button>
+          </div>
+        </div>
+
+        <!-- 上传进度 -->
+        <div class="upload-progress" id="uploadProgress"></div>
+
+        <!-- 文档网格 -->
+        <div class="docs-grid" id="docsGrid"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 上传模态框 -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>上传文档到知识库</h3>
+        <button class="btn-icon" onclick="closeUploadModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+          <div class="upload-zone-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <p class="upload-zone-text">拖拽文件到此处，或 <strong>点击浏览</strong></p>
+          <p class="upload-zone-hint">支持 PDF、Word、TXT、Excel 格式，单文件不超过 50MB</p>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(event)">
+
+        <div style="margin-top: var(--stack-md);">
+          <label style="font: var(--font-label-md); display: block; margin-bottom: var(--stack-sm); color: var(--color-on-surface);">文档分类</label>
+          <select class="input-field" id="uploadCategory" style="cursor: pointer;">
+            <option value="report">研究报告</option>
+            <option value="financial">财报数据</option>
+            <option value="news">金融新闻</option>
+            <option value="policy">政策法规</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeUploadModal()">取消</button>
+        <button class="btn btn-primary" id="btnUpload" onclick="startUpload()">上传</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- 模拟数据 ---
+    const documents = [
+      {
+        id: 1,
+        title: '贵州茅台 2024 年年度报告',
+        source: '上海证券交易所',
+        type: 'financial',
+        date: '2025-03-28',
+        size: '4.2 MB',
+        status: 'parsed',
+        chunks: 156,
+        desc: '包含公司概况、财务数据、经营分析、风险提示等完整年报内容。',
+        tags: ['年报', '白酒']
+      },
+      {
+        id: 2,
+        title: '新能源行业深度研究报告',
+        source: '中信证券研究所',
+        type: 'report',
+        date: '2025-05-08',
+        size: '8.7 MB',
+        status: 'parsed',
+        chunks: 312,
+        desc: '光伏、风电、储能产业链全景分析，涵盖技术路线、竞争格局和投资建议。',
+        tags: ['新能源', '研报']
+      },
+      {
+        id: 3,
+        title: '央行降准政策解读',
+        source: '中国人民银行',
+        type: 'policy',
+        date: '2025-05-06',
+        size: '1.1 MB',
+        status: 'parsed',
+        chunks: 45,
+        desc: '全面降准 0.5 个百分点，释放长期资金约 1 万亿元。附政策要点和影响分析。',
+        tags: ['货币政策', '降准']
+      },
+      {
+        id: 4,
+        title: '比亚迪 Q1 财报分析',
+        source: '公司公告',
+        type: 'financial',
+        date: '2025-04-29',
+        size: '3.5 MB',
+        status: 'parsed',
+        chunks: 128,
+        desc: '一季度营收 1502 亿元，净利润 46 亿元。新能源汽车销量全球第一。',
+        tags: ['季报', '新能源汽车']
+      },
+      {
+        id: 5,
+        title: 'A股市场日报：科技板块领涨',
+        source: '财经网',
+        type: 'news',
+        date: '2025-05-10',
+        size: '0.8 MB',
+        status: 'parsed',
+        chunks: 32,
+        desc: '受AI芯片利好影响，半导体板块集体拉升。沪指收涨 1.2%，深成指涨 1.8%。',
+        tags: ['日报', '科技']
+      },
+      {
+        id: 6,
+        title: '宁德时代全球竞争力分析',
+        source: '华泰证券研究所',
+        type: 'report',
+        date: '2025-04-15',
+        size: '12.3 MB',
+        status: 'parsed',
+        chunks: 478,
+        desc: '动力电池全球市占率 37%，技术壁垒深厚。海外扩产计划及盈利预测。',
+        tags: ['锂电池', '研报']
+      },
+      {
+        id: 7,
+        title: '注册制改革最新政策汇编',
+        source: '证监会',
+        type: 'policy',
+        date: '2025-03-20',
+        size: '2.8 MB',
+        status: 'parsed',
+        chunks: 89,
+        desc: '全面注册制相关法规、实施细则及配套规则汇总。',
+        tags: ['注册制', '政策']
+      },
+      {
+        id: 8,
+        title: '沪深300指数估值周报',
+        source: 'Wind 金融终端',
+        type: 'news',
+        date: '2025-05-09',
+        size: '1.5 MB',
+        status: 'parsed',
+        chunks: 56,
+        desc: '当前PE 12.3x，处于近十年 35% 分位。股债性价比指标偏股方向。',
+        tags: ['指数', '估值']
+      },
+      {
+        id: 9,
+        title: '公募基金一季度持仓分析',
+        source: '天相投顾',
+        type: 'report',
+        date: '2025-04-22',
+        size: '6.1 MB',
+        status: 'parsed',
+        chunks: 201,
+        desc: '偏股基金一季度加仓科技、减仓消费。前十大重仓股及行业配置变化。',
+        tags: ['基金', '持仓']
+      },
+      {
+        id: 10,
+        title: '中国平安综合财报',
+        source: '公司公告',
+        type: 'financial',
+        date: '2025-04-18',
+        size: '5.6 MB',
+        status: 'parsed',
+        chunks: 189,
+        desc: '一季度归母净利润 412 亿。寿险改革效果显现，新业务价值同比增长 28%。',
+        tags: ['保险', '季报']
+      },
+      {
+        id: 11,
+        title: '美联储议息会议纪要',
+        source: 'Federal Reserve',
+        type: 'news',
+        date: '2025-05-07',
+        size: '0.9 MB',
+        status: 'parsed',
+        chunks: 38,
+        desc: '维持利率不变，但释放年内可能降息信号。关注通胀进展和就业数据。',
+        tags: ['美联储', '利率']
+      },
+      {
+        id: 12,
+        title: '半导体产业链全景图',
+        source: '国盛证券',
+        type: 'report',
+        date: '2025-05-02',
+        size: '15.2 MB',
+        status: 'parsed',
+        chunks: 523,
+        desc: '从设计、制造到封测全产业链梳理。国产替代关键环节及核心标的分析。',
+        tags: ['半导体', '产业链']
+      }
+    ];
+
+    let currentFilter = 'all';
+    let currentCategory = 'all';
+    let selectedFiles = [];
+
+    // --- 初始化 ---
+    function init() {
+      renderDocs(documents);
+    }
+
+    // --- 渲染文档 ---
+    function renderDocs(docs) {
+      const grid = document.getElementById('docsGrid');
+      if (docs.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state" style="grid-column: 1/-1;">
+            <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <p class="empty-state-title">暂无匹配文档</p>
+            <p class="empty-state-desc">尝试修改搜索条件或上传新文档</p>
+          </div>`;
+        return;
+      }
+
+      grid.innerHTML = docs.map(doc => {
+        const typeClass = getTypeClass(doc.type);
+        const typeIcon = getTypeIcon(doc.type);
+        const typeLabel = getTypeLabel(doc.type);
+
+        return `
+          <div class="doc-card" data-type="${doc.type}" onclick="viewDoc(${doc.id})">
+            <div class="doc-card-header">
+              <div class="doc-type-icon ${typeClass}">
+                ${typeIcon}
+              </div>
+              <div class="doc-card-info">
+                <div class="doc-card-title" title="${doc.title}">${doc.title}</div>
+                <div class="doc-card-source">${doc.source}</div>
+              </div>
+              <div class="doc-card-actions">
+                <button class="doc-action-btn" title="下载" onclick="event.stopPropagation(); downloadDoc(${doc.id})">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+                <button class="doc-action-btn danger" title="删除" onclick="event.stopPropagation(); deleteDoc(${doc.id})">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="doc-card-body">
+              <p class="doc-card-desc">${doc.desc}</p>
+            </div>
+            <div class="doc-card-footer">
+              <div class="doc-card-meta">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>${doc.date}</span>
+                <span style="margin: 0 4px;">·</span>
+                <span>${doc.size}</span>
+                <span style="margin: 0 4px;">·</span>
+                <span>${doc.chunks} 段</span>
+              </div>
+              <div class="doc-card-tags">
+                <span class="tag ${typeClass === 'doc-type-report' ? 'tag-blue' : typeClass === 'doc-type-news' ? 'tag-green' : typeClass === 'doc-type-data' ? 'tag-orange' : 'tag-gray'}">${typeLabel}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function getTypeClass(type) {
+      const map = { report: 'doc-type-report', financial: 'doc-type-data', news: 'doc-type-news', policy: 'doc-type-pdf' };
+      return map[type] || 'doc-type-report';
+    }
+
+    function getTypeIcon(type) {
+      const icons = {
+        report: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+        financial: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
+        news: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 20H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1"/><rect x="14" y="7" width="8" height="14" rx="2"/></svg>',
+        policy: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'
+      };
+      return icons[type] || icons.report;
+    }
+
+    function getTypeLabel(type) {
+      const map = { report: '研报', financial: '财报', news: '新闻', policy: '政策' };
+      return map[type] || '其他';
+    }
+
+    // --- 筛选 ---
+    function filterDocs() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      let filtered = documents;
+
+      if (currentFilter !== 'all') {
+        filtered = filtered.filter(d => d.type === currentFilter);
+      }
+
+      if (search) {
+        filtered = filtered.filter(d =>
+          d.title.toLowerCase().includes(search) ||
+          d.desc.toLowerCase().includes(search) ||
+          d.tags.some(t => t.toLowerCase().includes(search))
+        );
+      }
+
+      renderDocs(filtered);
+    }
+
+    function filterByType(btn, type) {
+      currentFilter = type;
+      document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      filterDocs();
+    }
+
+    function filterByCategory(item, category) {
+      currentCategory = category;
+      currentFilter = category;
+      document.querySelectorAll('#categoryList .sidebar-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+
+      // 同步工具栏筛选
+      const tab = document.querySelector(`.filter-tab[data-type="${category}"]`);
+      if (tab) {
+        document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      }
+
+      filterDocs();
+
+      // 移动端关闭侧边栏
+      if (window.innerWidth <= 768) toggleSidebar();
+    }
+
+    // --- 操作 ---
+    function viewDoc(id) {
+      const doc = documents.find(d => d.id === id);
+      if (doc) {
+        alert(`查看文档：${doc.title}\n\n（此功能待连接后端API）`);
+      }
+    }
+
+    function downloadDoc(id) {
+      const doc = documents.find(d => d.id === id);
+      if (doc) alert(`下载：${doc.title}\n\n（此功能待连接后端API）`);
+    }
+
+    function deleteDoc(id) {
+      const idx = documents.findIndex(d => d.id === id);
+      if (idx === -1) return;
+      const card = document.querySelector(`.doc-card[onclick*="${id}"]`);
+      if (card) {
+        card.style.transition = 'all 0.3s ease';
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          documents.splice(idx, 1);
+          filterDocs();
+        }, 300);
+      }
+    }
+
+    // --- 上传 ---
+    function openUploadModal() {
+      document.getElementById('uploadModal').classList.add('active');
+    }
+
+    function closeUploadModal() {
+      document.getElementById('uploadModal').classList.remove('active');
+      selectedFiles = [];
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      document.getElementById('uploadZone').classList.add('dragover');
+    }
+
+    function handleDragLeave(e) {
+      document.getElementById('uploadZone').classList.remove('dragover');
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('uploadZone').classList.remove('dragover');
+      selectedFiles = Array.from(e.dataTransfer.files);
+      showFileList();
+    }
+
+    function handleFileSelect(e) {
+      selectedFiles = Array.from(e.target.files);
+      showFileList();
+    }
+
+    function showFileList() {
+      const zone = document.getElementById('uploadZone');
+      if (selectedFiles.length > 0) {
+        const names = selectedFiles.map(f => f.name).join(', ');
+        zone.innerHTML = `
+          <div class="upload-zone-icon" style="background: rgba(0,35,111,0.08); color: var(--color-primary);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <p class="upload-zone-text">已选择 <strong>${selectedFiles.length}</strong> 个文件</p>
+          <p class="upload-zone-hint">${names}</p>`;
+      }
+    }
+
+    function startUpload() {
+      if (selectedFiles.length === 0) {
+        alert('请先选择文件');
+        return;
+      }
+
+      closeUploadModal();
+      const progressEl = document.getElementById('uploadProgress');
+      progressEl.classList.add('active');
+
+      const category = document.getElementById('uploadCategory').value;
+      const catLabel = getTypeLabel(category);
+
+      selectedFiles.forEach((file, i) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'upload-item';
+        itemEl.innerHTML = `
+          <div class="upload-item-icon">${getTypeIcon(category)}</div>
+          <div class="upload-item-info">
+            <div class="upload-item-name">${file.name}</div>
+            <div class="upload-item-status" id="status-${i}">上传中... 0%</div>
+            <div class="upload-progress-bar"><div class="upload-progress-fill" id="progress-${i}" style="width: 0%"></div></div>
+          </div>`;
+        progressEl.appendChild(itemEl);
+
+        // 模拟上传进度
+        simulateUpload(i, file.name, category, catLabel);
+      });
+
+      selectedFiles = [];
+    }
+
+    function simulateUpload(index, fileName, category, catLabel) {
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 15 + 5;
+        if (progress >= 100) {
+          progress = 100;
+          clearInterval(interval);
+
+          document.getElementById(`progress-${index}`).style.width = '100%';
+          document.getElementById(`progress-${index}`).classList.add('complete');
+          document.getElementById(`status-${index}`).textContent = `已完成 · 正在解析`;
+
+          // 模拟解析完成后添加到列表
+          setTimeout(() => {
+            documents.unshift({
+              id: Date.now() + index,
+              title: fileName.replace(/\.[^.]+$/, ''),
+              source: '本地上传',
+              type: category,
+              date: new Date().toISOString().split('T')[0],
+              size: (Math.random() * 10 + 0.5).toFixed(1) + ' MB',
+              status: 'parsed',
+              chunks: Math.floor(Math.random() * 200 + 20),
+              desc: `用户上传的${catLabel}文档，正在解析中...`,
+              tags: [catLabel]
+            });
+            filterDocs();
+
+            document.getElementById(`status-${index}`).textContent = `解析完成`;
+          }, 2000);
+        } else {
+          document.getElementById(`progress-${index}`).style.width = progress + '%';
+          document.getElementById(`status-${index}`).textContent = `上传中... ${Math.round(progress)}%`;
+        }
+      }, 200);
+    }
+
+    // --- 侧边栏 ---
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('mobileOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    // --- 初始化 ---
+    init();
+  </script>
+</body>
+</html>
