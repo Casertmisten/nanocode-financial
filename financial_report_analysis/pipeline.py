@@ -2,8 +2,6 @@
 
 import json
 import logging
-import urllib.request
-
 import config
 import rag
 from financial_report_analysis.prompts import ANALYZE_PROMPT, REDUCE_PROMPT
@@ -16,26 +14,8 @@ _TOP_K_PER_QUESTION = 3
 
 def _call_llm(system_prompt: str, user_content: str) -> str:
     """纯文本 LLM 调用，不携带工具。"""
-    request = urllib.request.Request(
-        config.API_URL,
-        data=json.dumps(
-            {
-                "model": config.MODEL,
-                "max_tokens": 4096,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-            }
-        ).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config.API_KEY}",
-        },
-    )
-    response = urllib.request.urlopen(request)
-    result = json.loads(response.read())
-    return result["choices"][0]["message"]["content"]
+    import llm
+    return llm.call_llm(system_prompt, user_content)
 
 
 def _retrieve_all():

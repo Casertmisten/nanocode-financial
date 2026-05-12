@@ -5,32 +5,24 @@ import datetime
 import json
 import os
 import re
-import urllib.request
-
 import config
 from tools import make_schema, run_tool
 
 
 def call_api(messages, system_prompt):
     """调用 LLM API (OpenAI Chat Completions compatible)."""
-    all_messages = [{"role": "system", "content": system_prompt}] + messages
-    request = urllib.request.Request(
-        config.API_URL,
-        data=json.dumps(
-            {
-                "model": config.MODEL,
-                "max_tokens": 8192,
-                "messages": all_messages,
-                "tools": make_schema(),
-            }
-        ).encode(),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {config.API_KEY}",
-        },
-    )
-    response = urllib.request.urlopen(request)
-    return json.loads(response.read())
+    import httpx
+    body = {
+        "model": config.MODEL,
+        "max_tokens": 8192,
+        "messages": [{"role": "system", "content": system_prompt}] + messages,
+        "tools": make_schema(),
+    }
+    resp = httpx.post(config.API_URL, json=body, headers={
+        "Authorization": f"Bearer {config.API_KEY}",
+        "Content-Type": "application/json",
+    }, timeout=120.0)
+    return resp.json()
 
 
 def separator():
