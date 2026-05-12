@@ -185,11 +185,6 @@ async def chat(req: ChatRequest):
     async def stream():
         """SSE 流式生成器。"""
         full_content: list[str] = []
-        full_tool_calls: list[dict] = []
-
-        # 用于追踪本轮所有 tool_calls（多轮 agentic loop）
-        all_tool_calls: list[dict] = []
-        all_tool_results: list[dict] = []
 
         async for sse_str in _agentic_loop(llm_messages, req.model):
             # 解析事件类型
@@ -213,7 +208,6 @@ async def chat(req: ChatRequest):
         # 从 llm_messages 的最后状态获取 tool_calls 信息
         # 查找最后一条 assistant 消息中的 tool_calls
         saved_tool_calls = None
-        saved_tool_result = None
         for msg in reversed(llm_messages):
             if msg.get("role") == "assistant" and msg.get("tool_calls"):
                 saved_tool_calls = json.dumps(msg["tool_calls"], ensure_ascii=False)
