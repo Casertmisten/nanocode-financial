@@ -3,6 +3,9 @@
 from pathlib import Path
 
 from llama_index.core import SimpleDirectoryReader
+from utils import BaseLogger
+
+log = BaseLogger.getLogger("rag.loader")
 
 
 def load_documents(doc_dir: str) -> list:
@@ -22,6 +25,7 @@ def load_documents(doc_dir: str) -> list:
         recursive=True,
     )
     documents = reader.load_data()
+    log.info("从目录加载文档: %s, 支持=%s, 数量=%d", doc_dir, supported_ext, len(documents))
     return documents
 
 
@@ -32,4 +36,6 @@ def load_single_file(file_path: str) -> list:
         raise FileNotFoundError(f"File not found: {file_path}")
 
     reader = SimpleDirectoryReader(input_files=[str(p)])
-    return reader.load_data()
+    docs = reader.load_data()
+    log.info("加载单文件: %s, 文档数=%d", file_path, len(docs))
+    return docs

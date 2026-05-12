@@ -5,7 +5,12 @@ from datetime import datetime, timezone
 
 import aiosqlite
 
-DB_PATH = "data/nanocode.db"
+import config
+from utils import BaseLogger
+
+log = BaseLogger.getLogger("db")
+
+DB_PATH = config.DB_PATH
 
 
 def _now() -> str:
@@ -85,6 +90,7 @@ async def init_db():
             );
         """)
         await db.commit()
+        log.info("数据库初始化完成: %s", DB_PATH)
     finally:
         await db.close()
 
@@ -111,6 +117,7 @@ async def create_session(session_id: str, title: str = "新对话", model: str =
             (session_id, title, model, now, now),
         )
         await db.commit()
+        log.info("创建会话: %s", session_id)
         return {"id": session_id, "title": title, "model": model,
                 "knowledge_base_ids": "[]", "created_at": now, "updated_at": now}
     finally:
@@ -163,6 +170,7 @@ async def delete_session(session_id: str) -> bool:
     try:
         cursor = await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         await db.commit()
+        log.info("删除会话: %s, 影响=%d 行", session_id, cursor.rowcount)
         return cursor.rowcount > 0
     finally:
         await db.close()

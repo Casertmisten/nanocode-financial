@@ -10,6 +10,9 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
 from rag.chunker import split_documents
+from utils import BaseLogger
+
+log = BaseLogger.getLogger("rag.indexer")
 
 # Track which custom model names have been registered with LlamaIndex enums.
 _registered_models: set = set()
@@ -65,6 +68,7 @@ def _register_custom_model(model_name: str):
         _TEXT_MODE_MODEL_DICT.setdefault(key, custom_mode_model)
 
     _registered_models.add(model_name)
+    log.info("注册自定义嵌入模型: %s", model_name)
 
 
 def _get_embed_model(api_url: str, api_key: str, model_name: str):
@@ -124,6 +128,7 @@ def get_index(
     vector_store = ChromaVectorStore(chroma_collection=collection)
 
     index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
+    log.info("获取索引完成: chroma_dir=%s, 集合文档数=%d", chroma_dir, collection.count())
     return index, embed_model
 
 
@@ -156,11 +161,13 @@ def add_to_index(
         ingested[file_path] = current_hash
 
     if not new_docs:
+        log.info("无新文档需要索引（共检查 %d 个）", len(documents))
         return 0
 
     # Split and insert
     nodes = split_documents(new_docs, chunk_size, chunk_overlap)
     index.insert_nodes(nodes)
+    log.info("增量索引完成: %d 个文档, %d 个节点", len(new_docs), len(nodes))
 
     # Update tracker
     _save_ingested(tracker_path, ingested)
@@ -180,6 +187,7 @@ def build_fresh_index(
 
     Returns (index, embed_model, doc_count) tuple.
     """
+    log.info("开始构建全新索引: %d 个文档", len(documents))
     embed_model = _get_embed_model(embedding_api_url, embedding_api_key, embedding_model_name)
 
     os.makedirs(chroma_dir, exist_ok=True)
@@ -205,4 +213,5 @@ def build_fresh_index(
             ingested[file_path] = _file_md5(file_path)
     _save_ingested(tracker_path, ingested)
 
+    log.info("全新索引构建完成: %d 个文档, %d 个节点", len(documents), len(nodes))
     return index, embed_model, len(documents)

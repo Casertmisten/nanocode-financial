@@ -581,9 +581,9 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           </div>
           <p class="upload-zone-text">拖拽文件到此处，或 <strong>点击浏览</strong></p>
-          <p class="upload-zone-hint">支持 PDF、Word、TXT、Excel 格式，单文件不超过 50MB</p>
+          <p class="upload-zone-hint">支持 PDF、Word、TXT、Markdown、Excel 格式，单文件不超过 50MB</p>
         </div>
-        <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(event)">
+        <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv,.md,.markdown" style="display:none" onchange="handleFileSelect(event)">
 
         <div style="margin-top: var(--stack-md);">
           <label style="font: var(--font-label-md); display: block; margin-bottom: var(--stack-sm); color: var(--color-on-surface);">文档分类</label>
@@ -808,6 +808,7 @@
 
     function handleFileSelect(e) {
       selectedFiles = Array.from(e.target.files);
+      console.log('handleFileSelect:', selectedFiles.length, selectedFiles.map(f => f.name));
       showFileList();
     }
 
@@ -830,14 +831,15 @@
         return;
       }
 
+      const files = [...selectedFiles];
       closeUploadModal();
       const progressEl = document.getElementById('uploadProgress');
       progressEl.classList.add('active');
 
       const category = document.getElementById('uploadCategory').value;
 
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const itemEl = document.createElement('div');
         itemEl.className = 'upload-item';
         itemEl.innerHTML = `

@@ -1,14 +1,14 @@
 """LLM 流式调用层 — 同步/异步流式 + 同步非流式接口。"""
 
 import json
-import logging
 from typing import AsyncIterator, Iterator
 
 import httpx
 
 import config
+from utils import BaseLogger
 
-log = logging.getLogger(__name__)
+log = BaseLogger.getLogger("llm")
 
 _HEADERS = {
     "Content-Type": "application/json",
@@ -45,7 +45,8 @@ def stream_chat(
 ) -> Iterator[dict]:
     """同步流式迭代器，用于 CLI。"""
     body = _build_body(messages, system_prompt, tools, model, stream=True)
-    with httpx.Client(timeout=_TIMEOUT) as client:
+    log.info("同步流式调用: model=%s, 消息数=%d", body["model"], len(messages))
+    with httpx.Client(timeout=_TIMEOUT, proxy=None) as client:
         with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
             resp.raise_for_status()
             for line in resp.iter_lines():
@@ -68,7 +69,8 @@ async def async_stream_chat(
 ) -> AsyncIterator[dict]:
     """异步流式迭代器，用于 Web SSE。"""
     body = _build_body(messages, system_prompt, tools, model, stream=True)
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    log.info("异步流式调用: model=%s, 消息数=%d", body["model"], len(messages))
+    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=None) as client:
         async with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
             resp.raise_for_status()
             async for line in resp.aiter_lines():
@@ -94,7 +96,10 @@ def call_llm(
         {"role": "user", "content": user_content},
     ]
     body = _build_body(messages, "", model=model, stream=False)
-    resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=_TIMEOUT)
+    log.info("同步非流式调用: model=%s, 内容长度=%d", body["model"], len(user_content))
+    resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=_TIMEOUT, proxy=None)
     resp.raise_for_status()
     data = resp.json()
-    return data["choices"][0]["message"]["content"]
+    content = data["choices"][0]["message"]["content"]
+    log.info("同步调用完成: 响应长度=%d", len(content))
+    return content

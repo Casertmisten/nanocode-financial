@@ -6,6 +6,9 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 
 import db
+from utils import BaseLogger
+
+log = BaseLogger.getLogger("sessions")
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -16,6 +19,7 @@ async def list_sessions():
     for s in sessions:
         if isinstance(s.get("knowledge_base_ids"), str):
             s["knowledge_base_ids"] = json.loads(s["knowledge_base_ids"])
+    log.info("查询会话列表: %d 条", len(sessions))
     return sessions
 
 
@@ -23,6 +27,7 @@ async def list_sessions():
 async def create_session():
     session_id = uuid4().hex[:16]
     session = await db.create_session(session_id)
+    log.info("创建会话: %s", session_id)
     return session
 
 
@@ -35,6 +40,7 @@ async def get_session(session_id: str):
     session["messages"] = messages
     if isinstance(session.get("knowledge_base_ids"), str):
         session["knowledge_base_ids"] = json.loads(session["knowledge_base_ids"])
+    log.info("获取会话详情: %s, 消息数=%d", session_id, len(messages))
     return session
 
 
@@ -47,6 +53,7 @@ async def update_session(session_id: str, body: dict):
     ok = await db.update_session(session_id, **fields)
     if not ok:
         raise HTTPException(404, "会话不存在")
+    log.info("更新会话: %s, fields=%s", session_id, list(fields.keys()))
     return {"ok": True}
 
 
@@ -55,4 +62,5 @@ async def delete_session(session_id: str):
     ok = await db.delete_session(session_id)
     if not ok:
         raise HTTPException(404, "会话不存在")
+    log.info("删除会话: %s", session_id)
     return {"ok": True}

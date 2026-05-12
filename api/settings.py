@@ -4,6 +4,9 @@ import httpx
 from fastapi import APIRouter
 
 import db
+from utils import BaseLogger
+
+log = BaseLogger.getLogger("settings")
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -35,6 +38,7 @@ async def get_settings():
 @router.put("")
 async def save_settings(body: dict):
     await db.save_settings(body)
+    log.info("设置已保存: %s", list(body.keys()))
     return {"ok": True}
 
 
@@ -46,9 +50,12 @@ async def test_connection(body: dict):
         return {"ok": False, "message": "缺少 API 地址或 Key"}
     try:
         url = api_url.rstrip("/") + "/models"
-        resp = httpx.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=10.0)
+        resp = httpx.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=10.0, proxy=None)
         if resp.status_code == 200:
+            log.info("连接测试成功: %s", api_url)
             return {"ok": True, "message": "连接成功"}
+        log.warning("连接测试失败: %s, HTTP %d", api_url, resp.status_code)
         return {"ok": False, "message": f"HTTP {resp.status_code}"}
     except Exception as e:
+        log.error("连接测试异常: %s, error=%s", api_url, e)
         return {"ok": False, "message": str(e)}

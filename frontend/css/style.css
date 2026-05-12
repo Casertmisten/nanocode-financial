@@ -260,7 +260,7 @@ ul, ol {
   white-space: nowrap;
 }
 
-.sidebar-item .item-delete {
+.sidebar-item .item-action {
   opacity: 0;
   transition: opacity var(--transition-fast);
   padding: 2px;
@@ -268,13 +268,34 @@ ul, ol {
   color: rgba(241, 240, 247, 0.4);
 }
 
-.sidebar-item:hover .item-delete {
+.sidebar-item:hover .item-action {
   opacity: 1;
 }
 
-.sidebar-item .item-delete:hover {
+.sidebar-item .item-action:hover {
+  color: var(--color-inverse-on-surface);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-item .item-action[title="删除"]:hover {
   color: var(--color-danger);
   background: rgba(239, 68, 68, 0.15);
+}
+
+.sidebar-item.renaming .item-action,
+.sidebar-item.renaming:hover .item-action {
+  display: none;
+}
+
+.sidebar-item .rename-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  color: var(--color-inverse-on-surface);
+  font-size: 14px;
+  padding: 2px 6px;
+  outline: none;
 }
 
 /* 底部导航 */

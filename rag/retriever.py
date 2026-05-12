@@ -1,7 +1,6 @@
 """Hybrid retrieval: parallel vector + BM25 recall, RRF fusion, optional reranking."""
 
 import json
-import logging
 import urllib.request
 
 import chromadb
@@ -11,8 +10,9 @@ import config
 from rank_bm25 import BM25Okapi
 
 from llama_index.core.retrievers import VectorIndexRetriever
+from utils import BaseLogger
 
-log = logging.getLogger(__name__)
+log = BaseLogger.getLogger("rag.retriever")
 
 # 每路独立召回数量
 _RECALL_PER_CHANNEL = 40
@@ -41,6 +41,7 @@ def _bm25_recall(question: str, top_k: int) -> dict[str, float]:
 
     # 按 BM25 分数取 top_k
     top_indices = np.argsort(bm25_scores)[::-1][:top_k]
+    log.info("BM25 召回: 语料=%d 条, 返回 %d 条", len(corpus), len(top_indices))
     return {ids[i]: float(bm25_scores[i]) for i in top_indices}
 
 
@@ -51,6 +52,7 @@ def _vector_recall(index, question: str, top_k: int) -> dict[str, float]:
     result = {}
     for nws in nodes:
         result[nws.node.node_id] = nws.score or 0.0
+    log.info("向量召回: 返回 %d 条", len(result))
     return result
 
 
@@ -70,6 +72,7 @@ def _rrf_fuse(vector_results: dict, bm25_results: dict, k: int = 60) -> dict[str
         v_rank = vector_rank.get(nid, 9999)
         b_rank = bm25_rank.get(nid, 9999)
         fused[nid] = 0.7 / (k + v_rank) + 0.3 / (k + b_rank)
+    log.info("RRF 融合: 向量=%d, BM25=%d, 融合=%d", len(vector_results), len(bm25_results), len(fused))
     return fused
 
 
@@ -89,9 +92,11 @@ def _rerank(query: str, documents: list[str], top_n: int) -> list[dict]:
     try:
         req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(resp.read().decode())
+            results = json.loads(resp.read().decode())
+            log.info("Rerank 成功: 输入=%d, 输出=%d", len(documents), len(results))
+            return results
     except Exception:
-        log.warning("Reranker call failed, falling back to hybrid scores", exc_info=True)
+        log.warning("Reranker 调用失败，降级使用混合分数", exc_info=True)
         return []
 
 
@@ -102,11 +107,14 @@ def retrieve(index, question: str, top_k: int = 5) -> list[dict]:
     2. RRF 融合两路结果
     3. Reranker 精排输出 top_k
     """
+    log.info("检索开始: question=%s, top_k=%d", question[:50], top_k)
+
     # 两路并行召回
     vector_results = _vector_recall(index, question, _RECALL_PER_CHANNEL)
     bm25_results = _bm25_recall(question, _RECALL_PER_CHANNEL)
 
     if not vector_results and not bm25_results:
+        log.info("检索结果为空")
         return []
 
     # RRF 融合
@@ -140,6 +148,7 @@ def retrieve(index, question: str, top_k: int = 5) -> list[dict]:
                     "source": id_to_source.get(nid, "unknown"),
                     "score": round(item.get("score", 0), 4),
                 })
+        log.info("Rerank 检索完成: %d 条结果", len(results))
         return results
 
     # 无 reranker，用融合分数
@@ -150,6 +159,7 @@ def retrieve(index, question: str, top_k: int = 5) -> list[dict]:
             "source": id_to_source.get(nid, "unknown"),
             "score": round(fused[nid], 4),
         })
+    log.info("混合检索完成（无 rerank）: %d 条结果", len(results))
     return results
 
 

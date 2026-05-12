@@ -1,7 +1,6 @@
 """SSE 流式对话 API — 异步 agentic loop + 工具调用。"""
 
 import json
-import logging
 import os
 from typing import AsyncIterator
 
@@ -13,8 +12,9 @@ import config
 import db
 import llm
 import tools
+from utils import BaseLogger
 
-log = logging.getLogger(__name__)
+log = BaseLogger.getLogger("chat")
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -32,6 +32,7 @@ def _load_system_prompt() -> str:
 
 
 SYSTEM_PROMPT = _load_system_prompt()
+log.info("系统提示词加载完成，长度: %d", len(SYSTEM_PROMPT))
 
 
 class ChatRequest(BaseModel):
@@ -80,7 +81,7 @@ async def _agentic_loop(
     # 循环次数上限，防止无限循环
     max_turns = 20
 
-    for _ in range(max_turns):
+    for turn in range(max_turns):
         # 累积当前轮的 content 和 tool_calls
         content_parts: list[str] = []
         tool_calls_map: dict[int, dict] = {}  # index -> {id, name, arguments}
@@ -141,11 +142,14 @@ async def _agentic_loop(
             except json.JSONDecodeError:
                 tool_args = {}
 
+            log.info("工具调用 [%d/%d]: %s(%s)", idx + 1, len(tool_calls_map), tool_name, json.dumps(tool_args, ensure_ascii=False)[:200])
+
             # yield 工具开始事件
             yield _sse("tool_start", {"tool": tool_name, "args": tool_args})
 
             # 执行工具
             tool_result = tools.run_tool(tool_name, tool_args)
+            log.info("工具结果 [%s]: %s", tool_name, str(tool_result)[:200])
 
             # yield 工具结束事件
             yield _sse("tool_end", {"tool": tool_name, "result": tool_result})
@@ -157,13 +161,19 @@ async def _agentic_loop(
                 "content": str(tool_result),
             })
 
+        if turn == max_turns - 1:
+            log.warning("agentic loop 达到最大轮次 %d", max_turns)
+
 
 @router.post("/chat")
 async def chat(req: ChatRequest):
     """SSE 流式对话接口。"""
+    log.info("收到对话请求: session=%s, model=%s, 消息长度=%d", req.session_id, req.model, len(req.message))
+
     # 检查会话是否存在
     session = await db.get_session(req.session_id)
     if not session:
+        log.warning("会话不存在: %s", req.session_id)
         raise HTTPException(404, "会话不存在")
 
     # 保存用户消息
@@ -177,10 +187,12 @@ async def chat(req: ChatRequest):
         if len(req.message) > 30:
             title += "..."
         await db.update_session(req.session_id, title=title)
+        log.info("新会话自动标题: %s", title)
 
     # 加载历史消息并转换为 LLM 格式
     messages_raw = await db.get_messages(req.session_id)
     llm_messages = _messages_to_llm_format(messages_raw)
+    log.info("加载历史消息 %d 条，转换为 %d 条 LLM 格式", len(messages_raw), len(llm_messages))
 
     async def stream():
         """SSE 流式生成器。"""
@@ -217,6 +229,8 @@ async def chat(req: ChatRequest):
             req.session_id, "assistant", content,
             tool_calls=saved_tool_calls,
         )
+
+        log.info("对话完成: session=%s, message_id=%d, 回复长度=%d", req.session_id, message_id, len(content))
 
         # 发送完成事件
         yield _sse("done", {"message_id": message_id})

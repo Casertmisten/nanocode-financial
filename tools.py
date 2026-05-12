@@ -6,6 +6,10 @@ import os
 import re
 import subprocess
 
+from utils import BaseLogger
+
+log = BaseLogger.getLogger("tools")
+
 
 # --- Original tool implementations ---
 
@@ -95,6 +99,7 @@ def rag_query_tool(args):
 
     question = args["question"]
     top_k = args.get("top_k", 5)
+    log.info("RAG 查询: question=%s, top_k=%d", question[:50], top_k)
     return rag_module.query_formatted(question, top_k)
 
 
@@ -103,6 +108,7 @@ def rag_ingest_tool(args):
     import rag as rag_module
 
     doc_path = args.get("path") or None
+    log.info("RAG 导入: path=%s", doc_path)
     count = rag_module.ingest(doc_path)
     if count == 0:
         return "没有新文档需要导入（所有文档已在知识库中）。"
@@ -159,8 +165,11 @@ TOOLS = {
 def run_tool(name, args):
     """Execute a tool by name with given arguments."""
     try:
-        return TOOLS[name][2](args)
+        result = TOOLS[name][2](args)
+        log.info("工具执行成功: %s", name)
+        return result
     except Exception as err:
+        log.error("工具执行失败: %s, error=%s", name, err, exc_info=True)
         return f"error: {err}"
 
 
