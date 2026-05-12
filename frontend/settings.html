@@ -737,6 +737,7 @@
     <span id="toastText"></span>
   </div>
 
+  <script src="js/api.js"></script>
   <script>
     // --- 提供商配置映射 ---
     const providerDefaults = {
@@ -826,7 +827,7 @@
     }
 
     // --- 测试连接 ---
-    function testConnection(section) {
+    async function testConnection(section) {
       const btn = document.getElementById(`${section}TestBtn`);
       const statusEl = document.getElementById(`${section}Status`);
 
@@ -834,26 +835,32 @@
       btn.textContent = '测试中...';
       statusEl.innerHTML = '<span class="status-dot disconnected"></span><span class="status-text">正在连接...</span>';
 
-      // 模拟测试
-      setTimeout(() => {
-        const success = Math.random() > 0.3;
-        btn.classList.remove('testing');
+      try {
+        const apiUrl = document.getElementById(`${section}ApiUrl`).value;
+        const apiKey = document.getElementById(`${section}ApiKey`).value;
+        const result = await api('POST', '/settings/test-connection', { apiUrl, apiKey });
 
-        if (success) {
+        btn.classList.remove('testing');
+        if (result.ok) {
           btn.classList.add('success');
           btn.textContent = '连接成功';
           statusEl.innerHTML = '<span class="status-dot connected"></span><span class="status-text connected">已连接</span>';
         } else {
           btn.classList.add('fail');
           btn.textContent = '连接失败';
-          statusEl.innerHTML = '<span class="status-dot error"></span><span class="status-text error">认证失败，请检查 API Key</span>';
+          statusEl.innerHTML = `<span class="status-dot error"></span><span class="status-text error">${result.message}</span>`;
         }
+      } catch (e) {
+        btn.classList.remove('testing');
+        btn.classList.add('fail');
+        btn.textContent = '连接失败';
+        statusEl.innerHTML = `<span class="status-dot error"></span><span class="status-text error">${e.message}</span>`;
+      }
 
-        setTimeout(() => {
-          btn.classList.remove('success', 'fail');
-          btn.textContent = '测试连接';
-        }, 3000);
-      }, 1200 + Math.random() * 800);
+      setTimeout(() => {
+        btn.classList.remove('success', 'fail');
+        btn.textContent = '测试连接';
+      }, 3000);
     }
 
     // --- 保存 ---
@@ -873,7 +880,7 @@
       el.addEventListener('input', markUnsaved);
     });
 
-    function saveSettings() {
+    async function saveSettings() {
       const config = {
         chat: {
           provider: document.getElementById('chatProvider').value,
@@ -899,18 +906,19 @@
         },
       };
 
-      // 模拟保存（实际应调用后端 API）
-      console.log('保存配置:', config);
-
-      hasUnsaved = false;
-      document.getElementById('saveHint').textContent = '已保存';
-      document.getElementById('saveHint').style.color = 'var(--color-success)';
-      showToast('设置已保存', 'success');
-
-      setTimeout(() => {
-        document.getElementById('saveHint').textContent = '修改后需保存才会生效';
-        document.getElementById('saveHint').style.color = '';
-      }, 3000);
+      try {
+        await api('PUT', '/settings', config);
+        hasUnsaved = false;
+        document.getElementById('saveHint').textContent = '已保存';
+        document.getElementById('saveHint').style.color = 'var(--color-success)';
+        showToast('设置已保存', 'success');
+        setTimeout(() => {
+          document.getElementById('saveHint').textContent = '修改后需保存才会生效';
+          document.getElementById('saveHint').style.color = '';
+        }, 3000);
+      } catch (e) {
+        showToast('保存失败: ' + e.message, 'error');
+      }
     }
 
     function resetSettings() {
@@ -972,6 +980,40 @@
       sidebar.classList.toggle('open');
       overlay.classList.toggle('active');
     }
+
+    // 从 API 加载设置
+    (async function loadSettings() {
+      try {
+        const settings = await api('GET', '/settings');
+        if (settings.chat) {
+          const c = settings.chat;
+          if (c.provider) document.getElementById('chatProvider').value = c.provider;
+          if (c.apiUrl) document.getElementById('chatApiUrl').value = c.apiUrl;
+          if (c.apiKey) document.getElementById('chatApiKey').value = c.apiKey;
+          if (c.model) document.getElementById('chatModel').value = c.model;
+          if (c.temperature != null) { document.getElementById('chatTemp').value = c.temperature; document.getElementById('chatTempVal').textContent = c.temperature; }
+          if (c.maxTokens != null) { document.getElementById('chatMaxTokens').value = c.maxTokens; document.getElementById('chatMaxTokensVal').textContent = c.maxTokens; }
+        }
+        if (settings.parse) {
+          const p = settings.parse;
+          if (p.provider) document.getElementById('parseProvider').value = p.provider;
+          if (p.apiUrl) document.getElementById('parseApiUrl').value = p.apiUrl;
+          if (p.apiKey) document.getElementById('parseApiKey').value = p.apiKey;
+          if (p.summaryModel) document.getElementById('parseSummaryModel').value = p.summaryModel;
+          if (p.embedModel) document.getElementById('parseEmbedModel').value = p.embedModel;
+          if (p.chunkSize != null) { document.getElementById('chunkSize').value = p.chunkSize; document.getElementById('chunkSizeVal').textContent = p.chunkSize; }
+          if (p.chunkOverlap != null) { document.getElementById('chunkOverlap').value = p.chunkOverlap; document.getElementById('chunkOverlapVal').textContent = p.chunkOverlap; }
+        }
+        if (settings.general) {
+          const g = settings.general;
+          if (g.vectorDb) document.getElementById('vectorDb').value = g.vectorDb;
+          if (g.storagePath) document.getElementById('storagePath').value = g.storagePath;
+          if (g.httpsProxy) document.getElementById('httpsProxy').value = g.httpsProxy;
+        }
+      } catch (e) {
+        console.error('加载设置失败:', e);
+      }
+    })();
   </script>
 </body>
 </html>
