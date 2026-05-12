@@ -11,6 +11,7 @@ from api.chat import router as chat_router
 from api.sessions import router as sessions_router
 from api.documents import router as documents_router
 from api.settings import router as settings_router
+from api.fra import router as fra_router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -27,6 +28,7 @@ app.include_router(chat_router)
 app.include_router(sessions_router)
 app.include_router(documents_router)
 app.include_router(settings_router)
+app.include_router(fra_router)
 
 
 # 健康检查
