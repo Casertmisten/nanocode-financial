@@ -1,6 +1,5 @@
 """Map-Reduce 流水线：检索 → 去重 → 维度分析 → 汇总报告。"""
 
-import json
 import logging
 import config
 import rag
