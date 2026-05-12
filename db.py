@@ -1,0 +1,349 @@
+"""SQLite 数据库初始化 + CRUD 层（异步，基于 aiosqlite）"""
+
+import json
+from datetime import datetime, timezone
+
+import aiosqlite
+
+DB_PATH = "data/nanocode.db"
+
+
+def _now() -> str:
+    """返回当前 UTC 时间的 ISO 格式字符串"""
+    return datetime.now(timezone.utc).isoformat()
+
+
+# ---------------------------------------------------------------------------
+# 数据库连接与初始化
+# ---------------------------------------------------------------------------
+
+async def get_db() -> aiosqlite.Connection:
+    """获取数据库连接，开启 WAL 模式和外键约束"""
+    db = await aiosqlite.connect(DB_PATH)
+    db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA journal_mode=WAL")
+    await db.execute("PRAGMA foreign_keys=ON")
+    return db
+
+
+async def init_db():
+    """创建所有表（如果不存在）"""
+    db = await get_db()
+    try:
+        await db.executescript("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL DEFAULT '新对话',
+                model TEXT NOT NULL DEFAULT '',
+                knowledge_base_ids TEXT DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+                role TEXT NOT NULL CHECK(role IN ('user','assistant','system','tool')),
+                content TEXT NOT NULL DEFAULT '',
+                tool_calls TEXT,
+                tool_result TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL UNIQUE,
+                file_size INTEGER DEFAULT 0,
+                file_type TEXT NOT NULL,
+                source TEXT DEFAULT 'upload',
+                status TEXT DEFAULT 'pending' CHECK(status IN ('pending','processing','ready','error')),
+                chunks INTEGER DEFAULT 0,
+                tags TEXT DEFAULT '[]',
+                description TEXT DEFAULT '',
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS fra_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+                query TEXT NOT NULL,
+                content TEXT NOT NULL,
+                filepath TEXT,
+                created_at TEXT NOT NULL
+            );
+        """)
+        await db.commit()
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# 辅助：将 Row 转为 dict
+# ---------------------------------------------------------------------------
+
+def _row_to_dict(row: aiosqlite.Row) -> dict:
+    return dict(row)
+
+
+# ---------------------------------------------------------------------------
+# Sessions CRUD
+# ---------------------------------------------------------------------------
+
+async def create_session(session_id: str, title: str = "新对话", model: str = "") -> dict:
+    """创建新会话，返回会话字典"""
+    now = _now()
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO sessions (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (session_id, title, model, now, now),
+        )
+        await db.commit()
+        return {"id": session_id, "title": title, "model": model,
+                "knowledge_base_ids": "[]", "created_at": now, "updated_at": now}
+    finally:
+        await db.close()
+
+
+async def list_sessions(limit: int = 50) -> list[dict]:
+    """获取会话列表，按更新时间倒序"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?", (limit,)
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def get_session(session_id: str) -> dict | None:
+    """获取单个会话"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
+        row = await cursor.fetchone()
+        return _row_to_dict(row) if row else None
+    finally:
+        await db.close()
+
+
+async def update_session(session_id: str, **fields) -> bool:
+    """更新会话字段，自动更新 updated_at"""
+    if not fields:
+        return False
+    fields["updated_at"] = _now()
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [session_id]
+    db = await get_db()
+    try:
+        cursor = await db.execute(f"UPDATE sessions SET {set_clause} WHERE id = ?", values)
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def delete_session(session_id: str) -> bool:
+    """删除会话（级联删除消息）"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# Messages CRUD
+# ---------------------------------------------------------------------------
+
+async def add_message(session_id: str, role: str, content: str,
+                      tool_calls: str | None = None,
+                      tool_result: str | None = None) -> int:
+    """添加消息，返回消息 ID"""
+    now = _now()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO messages (session_id, role, content, tool_calls, tool_result, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, role, content, tool_calls, tool_result, now),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def get_messages(session_id: str, limit: int = 100) -> list[dict]:
+    """获取会话消息，按创建时间正序"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ?",
+            (session_id, limit),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# Documents CRUD
+# ---------------------------------------------------------------------------
+
+async def add_document(title: str, filename: str, filepath: str,
+                       file_size: int, file_type: str, source: str = "upload",
+                       description: str = "", tags: str | None = None) -> int:
+    """添加文档记录，返回文档 ID"""
+    now = _now()
+    if tags is None:
+        tags = "[]"
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO documents (title, filename, filepath, file_size, file_type, source, "
+            "tags, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (title, filename, filepath, file_size, file_type, source, tags, description, now, now),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def list_documents(status: str | None = None,
+                         file_type: str | None = None,
+                         limit: int = 100) -> list[dict]:
+    """获取文档列表，支持按状态和类型筛选"""
+    conditions = []
+    params: list = []
+    if status:
+        conditions.append("status = ?")
+        params.append(status)
+    if file_type:
+        conditions.append("file_type = ?")
+        params.append(file_type)
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            f"SELECT * FROM documents {where} ORDER BY created_at DESC LIMIT ?", params + [limit]
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def get_document(doc_id: int) -> dict | None:
+    """获取单个文档"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM documents WHERE id = ?", (doc_id,))
+        row = await cursor.fetchone()
+        return _row_to_dict(row) if row else None
+    finally:
+        await db.close()
+
+
+async def update_document(doc_id: int, **fields) -> bool:
+    """更新文档字段，自动更新 updated_at"""
+    if not fields:
+        return False
+    fields["updated_at"] = _now()
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [doc_id]
+    db = await get_db()
+    try:
+        cursor = await db.execute(f"UPDATE documents SET {set_clause} WHERE id = ?", values)
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def delete_document(doc_id: int) -> bool:
+    """删除文档记录"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+    finally:
+        await db.close()
+
+
+async def get_document_stats() -> dict:
+    """获取文档统计信息"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT status, COUNT(*) as count FROM documents GROUP BY status"
+        )
+        rows = await cursor.fetchall()
+        stats = {_row_to_dict(r)["status"]: _row_to_dict(r)["count"] for r in rows}
+        # 补齐所有状态
+        for s in ("pending", "processing", "ready", "error"):
+            stats.setdefault(s, 0)
+        # 总数
+        cursor = await db.execute("SELECT COUNT(*) as total FROM documents")
+        row = await cursor.fetchone()
+        stats["total"] = _row_to_dict(row)["total"]
+        return stats
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# Settings CRUD
+# ---------------------------------------------------------------------------
+
+async def get_settings() -> dict:
+    """获取所有设置项，value 从 JSON 反序列化"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT key, value FROM settings")
+        rows = await cursor.fetchall()
+        result = {}
+        for r in rows:
+            d = _row_to_dict(r)
+            try:
+                result[d["key"]] = json.loads(d["value"])
+            except (json.JSONDecodeError, TypeError):
+                result[d["key"]] = d["value"]
+        return result
+    finally:
+        await db.close()
+
+
+async def save_settings(data: dict):
+    """保存设置项，value 序列化为 JSON"""
+    now = _now()
+    db = await get_db()
+    try:
+        for key, value in data.items():
+            await db.execute(
+                "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (key, json.dumps(value, ensure_ascii=False), now),
+            )
+        await db.commit()
+    finally:
+        await db.close()
