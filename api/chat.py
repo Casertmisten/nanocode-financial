@@ -18,7 +18,7 @@ log = BaseLogger.getLogger("chat")
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
-# 默认系统提示词
+
 _DEFAULT_SYSTEM_PROMPT = "你是一个金融分析助手"
 
 
@@ -26,7 +26,8 @@ def _load_system_prompt() -> str:
     """加载系统提示词，优先使用 prompts/rag_system.txt，支持 {cwd} 占位符。"""
     prompt_path = os.path.join(config.BASE_DIR, "prompts", "rag_system.txt")
     if os.path.isfile(prompt_path):
-        text = open(prompt_path, encoding="utf-8").read()
+        with open(prompt_path, encoding="utf-8") as f:
+            text = f.read()
         return text.replace("{cwd}", config.BASE_DIR)
     return _DEFAULT_SYSTEM_PROMPT
 
@@ -52,16 +53,13 @@ def _messages_to_llm_format(messages: list[dict]) -> list[dict]:
     for msg in messages:
         role = msg["role"]
         content = msg["content"]
-        # 跳过 tool 类型消息（工具结果已嵌入 assistant 消息的 tool_calls 中）
         if role == "tool":
             continue
         entry: dict = {"role": role, "content": content}
-        # 如果有 tool_calls，还原为 LLM 格式
         if msg.get("tool_calls"):
             try:
                 tc_list = json.loads(msg["tool_calls"]) if isinstance(msg["tool_calls"], str) else msg["tool_calls"]
                 entry["tool_calls"] = tc_list
-                # assistant 带 tool_calls 时 content 可能为空
                 if not content:
                     entry["content"] = None
             except (json.JSONDecodeError, TypeError):
@@ -76,17 +74,13 @@ async def _agentic_loop(
 ) -> AsyncIterator[str]:
     """异步 agentic loop，yield SSE 事件字符串。"""
     tools_schema = tools.make_schema()
-    # 深拷贝避免修改原始列表
     llm_messages = list(messages)
-    # 循环次数上限，防止无限循环
     max_turns = 20
 
     for turn in range(max_turns):
-        # 累积当前轮的 content 和 tool_calls
         content_parts: list[str] = []
         tool_calls_map: dict[int, dict] = {}  # index -> {id, name, arguments}
 
-        # 流式调用 LLM
         async for chunk in llm.async_stream_chat(
             llm_messages, SYSTEM_PROMPT, tools=tools_schema, model=model,
         ):
@@ -95,13 +89,11 @@ async def _agentic_loop(
                 continue
             delta = choices[0].get("delta", {})
 
-            # 处理文本 token
             text = delta.get("content")
             if text:
                 content_parts.append(text)
                 yield _sse("token", {"content": text})
 
-            # 处理工具调用增量
             tc_deltas = delta.get("tool_calls")
             if tc_deltas:
                 for tc in tc_deltas:
@@ -121,11 +113,9 @@ async def _agentic_loop(
                     if fn.get("arguments"):
                         entry["function"]["arguments"] += fn["arguments"]
 
-        # 如果没有工具调用，本轮结束
         if not tool_calls_map:
             break
 
-        # 按序组装 assistant 消息（含 tool_calls）
         assistant_msg: dict = {
             "role": "assistant",
             "content": "".join(content_parts) or None,
@@ -133,7 +123,6 @@ async def _agentic_loop(
         }
         llm_messages.append(assistant_msg)
 
-        # 执行每个工具调用
         for idx in sorted(tool_calls_map):
             tc = tool_calls_map[idx]
             tool_name = tc["function"]["name"]
@@ -144,17 +133,13 @@ async def _agentic_loop(
 
             log.info("工具调用 [%d/%d]: %s(%s)", idx + 1, len(tool_calls_map), tool_name, json.dumps(tool_args, ensure_ascii=False)[:200])
 
-            # yield 工具开始事件
             yield _sse("tool_start", {"tool": tool_name, "args": tool_args})
 
-            # 执行工具
             tool_result = tools.run_tool(tool_name, tool_args)
             log.info("工具结果 [%s]: %s", tool_name, str(tool_result)[:200])
 
-            # yield 工具结束事件
             yield _sse("tool_end", {"tool": tool_name, "result": tool_result})
 
-            # 将工具结果添加到消息列表
             llm_messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
@@ -170,32 +155,24 @@ async def chat(req: ChatRequest):
     """SSE 流式对话接口。"""
     log.info("收到对话请求: session=%s, model=%s, 消息长度=%d", req.session_id, req.model, len(req.message))
 
-    # 检查会话是否存在
     session = await db.get_session(req.session_id)
     if not session:
-        log.warning("会话不存在: %s", req.session_id)
         raise HTTPException(404, "会话不存在")
 
-    # 保存用户消息
     await db.add_message(req.session_id, "user", req.message)
 
-    # 首条消息时自动更新会话标题
-    existing = await db.get_messages(req.session_id)
-    if len(existing) == 1:
-        # 取消息前 30 字符作为标题
+    messages_raw = await db.get_messages(req.session_id)
+    if len(messages_raw) == 1:
         title = req.message[:30].replace("\n", " ")
         if len(req.message) > 30:
             title += "..."
         await db.update_session(req.session_id, title=title)
         log.info("新会话自动标题: %s", title)
 
-    # 加载历史消息并转换为 LLM 格式
-    messages_raw = await db.get_messages(req.session_id)
     llm_messages = _messages_to_llm_format(messages_raw)
     log.info("加载历史消息 %d 条，转换为 %d 条 LLM 格式", len(messages_raw), len(llm_messages))
 
     async def stream():
-        """SSE 流式生成器。"""
         full_content: list[str] = []
 
         async for sse_str in _agentic_loop(llm_messages, req.model):

@@ -3,12 +3,12 @@
 import datetime
 import json
 import os
-import sqlite3
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 import config
+import db
 from utils import BaseLogger
 
 log = BaseLogger.getLogger("fra")
@@ -95,14 +95,7 @@ async def _run_fra_stream(query: str, session_id: str | None = None):
         f.write(report)
 
     # 写入数据库
-    conn = sqlite3.connect(config.DB_PATH)
-    cursor = conn.execute(
-        "INSERT INTO fra_reports (session_id, query, content, filepath, created_at) VALUES (?, ?, ?, ?, ?)",
-        (session_id, query, report, filepath, datetime.datetime.now().isoformat()),
-    )
-    conn.commit()
-    report_id = cursor.lastrowid
-    conn.close()
+    report_id = await db.add_fra_report(query, report, filepath, session_id=session_id)
     log.info("报告已保存: id=%d, path=%s", report_id, filepath)
 
     yield f"event: done\ndata: {json.dumps({'report_id': report_id, 'filepath': filepath}, ensure_ascii=False)}\n\n"
@@ -127,21 +120,12 @@ async def run_fra(request: Request):
 
 @router.get("/reports")
 async def list_fra_reports():
-    conn = sqlite3.connect(config.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.execute("SELECT id, session_id, query, filepath, created_at FROM fra_reports ORDER BY created_at DESC LIMIT 20")
-    rows = [dict(r) for r in cursor.fetchall()]
-    conn.close()
-    return rows
+    return await db.list_fra_reports()
 
 
 @router.get("/reports/{report_id}")
 async def get_fra_report(report_id: int):
-    conn = sqlite3.connect(config.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.execute("SELECT * FROM fra_reports WHERE id=?", (report_id,))
-    row = cursor.fetchone()
-    conn.close()
+    row = await db.get_fra_report(report_id)
     if not row:
         raise HTTPException(404, "报告不存在")
-    return dict(row)
+    return row

@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
@@ -50,11 +51,8 @@ async def upload_documents(
     results = []
     for f in files:
         filename = f.filename or "untitled"
-        filepath = os.path.join(config.UPLOAD_DIR, filename)
-        if os.path.exists(filepath):
-            name, ext = os.path.splitext(filename)
-            import time
-            filepath = os.path.join(config.UPLOAD_DIR, f"{name}_{int(time.time())}{ext}")
+        name, ext = os.path.splitext(filename)
+        filepath = os.path.join(config.UPLOAD_DIR, f"{name}_{int(time.time())}{ext}")
 
         content = await f.read()
         with open(filepath, "wb") as out:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""nanocode-financial - 个人金融智能分析助手"""
+"""nanocode-financial - 个人金融智能分析助手-CLI 版本"""
 
 import datetime
 import json

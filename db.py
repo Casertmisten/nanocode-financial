@@ -355,3 +355,49 @@ async def save_settings(data: dict):
         await db.commit()
     finally:
         await db.close()
+
+
+# ---------------------------------------------------------------------------
+# FRA Reports CRUD
+# ---------------------------------------------------------------------------
+
+async def add_fra_report(query: str, content: str, filepath: str,
+                         session_id: str | None = None) -> int:
+    """添加 FRA 报告，返回报告 ID"""
+    now = _now()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO fra_reports (session_id, query, content, filepath, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, query, content, filepath, now),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def list_fra_reports(limit: int = 20) -> list[dict]:
+    """获取 FRA 报告列表"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, session_id, query, filepath, created_at FROM fra_reports "
+            "ORDER BY created_at DESC LIMIT ?", (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def get_fra_report(report_id: int) -> dict | None:
+    """获取单个 FRA 报告"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM fra_reports WHERE id = ?", (report_id,))
+        row = await cursor.fetchone()
+        return _row_to_dict(row) if row else None
+    finally:
+        await db.close()
