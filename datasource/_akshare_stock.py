@@ -47,13 +47,15 @@ def _ensure_initialized():
             last_req = {"time": 0}
 
             def patched_get(url, **kwargs):
-                if "eastmoney.com" in url:
+                is_em = "eastmoney.com" in url
+
+                if is_em:
                     elapsed = time.time() - last_req["time"]
                     if elapsed < 0.5:
                         time.sleep(0.5 - elapsed)
                     last_req["time"] = time.time()
 
-                if use_curl and "eastmoney.com" in url:
+                if use_curl and is_em:
                     try:
                         kw = {
                             "timeout": kwargs.get("timeout", 10),
@@ -66,19 +68,17 @@ def _ensure_initialized():
                     except Exception:
                         pass
 
-                if "headers" not in kwargs or kwargs["headers"] is None:
-                    kwargs["headers"] = {
+                if is_em:
+                    em_headers = {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                                       "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
                         "Referer": "https://www.eastmoney.com/",
                     }
-                elif isinstance(kwargs["headers"], dict):
-                    kwargs["headers"].setdefault(
-                        "User-Agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-                    )
-                    kwargs["headers"].setdefault("Referer", "https://www.eastmoney.com/")
+                    if "headers" not in kwargs or kwargs["headers"] is None:
+                        kwargs["headers"] = em_headers
+                    elif isinstance(kwargs["headers"], dict):
+                        kwargs["headers"].setdefault("User-Agent", em_headers["User-Agent"])
+                        kwargs["headers"].setdefault("Referer", em_headers["Referer"])
 
                 for attempt in range(3):
                     try:

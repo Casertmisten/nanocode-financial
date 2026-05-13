@@ -115,6 +115,76 @@ def rag_ingest_tool(args):
     return f"成功导入 {count} 个新文档到知识库。"
 
 
+# --- Datasource tool implementations ---
+
+
+def _fmt(data) -> str:
+    """统一将数据源结果序列化为字符串。"""
+    import pandas as pd
+
+    if data is None:
+        return "未获取到数据。"
+    if isinstance(data, pd.DataFrame):
+        return data.to_string()
+    return json.dumps(data, ensure_ascii=False, default=str)
+
+
+def stock_list_tool(args):
+    import db
+    keyword = args.get("keyword", "")
+    try:
+        stocks = db.get_cached_stock_list(keyword)
+    except Exception:
+        stocks = []
+    if not stocks:
+        return "本地缓存为空，股票列表尚未同步。"
+    return _fmt(stocks)
+
+
+def stock_basic_info_tool(args):
+    from datasource import stock
+    return _fmt(stock.get_stock_basic_info(args["code"]))
+
+
+def stock_quotes_tool(args):
+    from datasource import stock
+    return _fmt(stock.get_stock_quotes(args["code"]))
+
+
+def batch_stock_quotes_tool(args):
+    from datasource import stock
+    codes = [c.strip() for c in args["codes"].split(",") if c.strip()]
+    return _fmt(stock.get_batch_stock_quotes(codes))
+
+
+def stock_historical_tool(args):
+    from datasource import stock
+    return _fmt(stock.get_historical_data(
+        args["code"], args["start_date"], args["end_date"],
+        args.get("period", "daily"),
+    ))
+
+
+def stock_financial_tool(args):
+    from datasource import stock
+    return _fmt(stock.get_financial_data(args["code"]))
+
+
+def market_status_tool(args):
+    from datasource import stock
+    return _fmt(stock.get_market_status())
+
+
+def market_news_tool(args):
+    from datasource import news
+    return _fmt(news.collect_market_news())
+
+
+def stock_news_tool(args):
+    from datasource import news
+    return _fmt(news.get_stock_news(args["symbol"], args.get("limit", 10)))
+
+
 # --- Tool registry ---
 # (description, param_schema, function)
 
@@ -158,6 +228,53 @@ TOOLS = {
         "将文档导入本地金融知识库。支持 PDF 和 Markdown 文件。当用户要求导入或更新文档时使用。",
         {"path": "string"},
         rag_ingest_tool,
+    ),
+    # --- 股票数据工具 ---
+    "stock_list": (
+        "查询A股股票列表，支持按代码或名称关键词筛选。不传keyword返回前50条。",
+        {"keyword": "string?"},
+        stock_list_tool,
+    ),
+    "stock_basic_info": (
+        "获取个股基本信息（公司名称、行业、市值等）。参数code为股票代码，如600000。",
+        {"code": "string"},
+        stock_basic_info_tool,
+    ),
+    "stock_quotes": (
+        "获取个股实时行情（最新价、涨跌幅、成交量等）。参数code为股票代码。",
+        {"code": "string"},
+        stock_quotes_tool,
+    ),
+    "batch_stock_quotes": (
+        "批量获取多只股票实时行情。参数codes为逗号分隔的股票代码，如'600000,000001'。",
+        {"codes": "string"},
+        batch_stock_quotes_tool,
+    ),
+    "stock_historical": (
+        "获取个股历史K线数据。参数：code(股票代码)、start_date(起始日期YYYYMMDD)、end_date(结束日期YYYYMMDD)、period(周期: daily/weekly/monthly，可选)。",
+        {"code": "string", "start_date": "string", "end_date": "string", "period": "string?"},
+        stock_historical_tool,
+    ),
+    "stock_financial": (
+        "获取个股财务数据（利润表、资产负债表、现金流量表等）。参数code为股票代码。",
+        {"code": "string"},
+        stock_financial_tool,
+    ),
+    "market_status": (
+        "获取当前A股市场状态（开/闭市、交易时段等）。",
+        {},
+        market_status_tool,
+    ),
+    # --- 新闻数据工具 ---
+    "market_news": (
+        "聚合采集最新A股市场新闻，来源于东方财富、新浪等多个财经网站。",
+        {},
+        market_news_tool,
+    ),
+    "stock_news": (
+        "获取个股相关新闻。参数symbol为股票代码，limit为返回条数(可选，默认10)。",
+        {"symbol": "string", "limit": "number?"},
+        stock_news_tool,
     ),
 }
 

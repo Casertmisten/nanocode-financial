@@ -3,7 +3,6 @@
 import json
 import urllib.request
 
-import chromadb
 import jieba
 import numpy as np
 import config
@@ -25,7 +24,7 @@ def _tokenize(text: str) -> list[str]:
 
 def _bm25_recall(question: str, top_k: int) -> dict[str, float]:
     """独立 BM25 召回：从 ChromaDB 全量文档建索引，返回 top_k 个 node_id → score。"""
-    client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
+    client = config.get_chroma_client()
     collection = client.get_collection("financial_docs")
     all_docs = collection.get(include=["documents", "metadatas"])
 
@@ -122,7 +121,7 @@ def retrieve(index, question: str, top_k: int = 5) -> list[dict]:
     sorted_ids = sorted(fused, key=fused.get, reverse=True)
 
     # 获取 node 文本（从 ChromaDB）
-    client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
+    client = config.get_chroma_client()
     collection = client.get_collection("financial_docs")
     stored = collection.get(ids=sorted_ids[:20], include=["documents", "metadatas"])
 

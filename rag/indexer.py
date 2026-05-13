@@ -4,11 +4,11 @@ import hashlib
 import json
 import os
 
-import chromadb
 from llama_index.core import StorageContext, VectorStoreIndex
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
+import config
 from rag.chunker import split_documents
 from utils import BaseLogger
 
@@ -122,8 +122,7 @@ def get_index(
     """
     embed_model = _get_embed_model(embedding_api_url, embedding_api_key, embedding_model_name)
 
-    os.makedirs(chroma_dir, exist_ok=True)
-    chroma_client = chromadb.PersistentClient(path=chroma_dir)
+    chroma_client = config.get_chroma_client()
     collection = chroma_client.get_or_create_collection("financial_docs")
     vector_store = ChromaVectorStore(chroma_collection=collection)
 
@@ -190,8 +189,7 @@ def build_fresh_index(
     log.info("开始构建全新索引: %d 个文档", len(documents))
     embed_model = _get_embed_model(embedding_api_url, embedding_api_key, embedding_model_name)
 
-    os.makedirs(chroma_dir, exist_ok=True)
-    chroma_client = chromadb.PersistentClient(path=chroma_dir)
+    chroma_client = config.get_chroma_client()
     collection = chroma_client.get_or_create_collection("financial_docs")
     vector_store = ChromaVectorStore(chroma_collection=collection)
 

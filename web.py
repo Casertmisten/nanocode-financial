@@ -1,5 +1,6 @@
 """Web 入口 — FastAPI 应用，托管前端 + API 路由。"""
-import logging
+import asyncio
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -16,13 +17,26 @@ from utils import BaseLogger
 
 log = BaseLogger.getLogger("web")
 
+_SYNC_STOCKS = os.environ.get("SYNC_STOCKS", "").lower() in ("1", "true", "yes")
+
 app = FastAPI(title="FinAssist", version="0.1.0")
 
 
 @app.on_event("startup")
 async def startup():
     await db.init_db()
-    log.info("应用启动完成")
+    log.info("数据库初始化完成")
+    if _SYNC_STOCKS:
+        asyncio.create_task(_sync_stocks())
+
+
+async def _sync_stocks():
+    """启动后异步同步股票列表到本地数据库。"""
+    try:
+        count = await db.sync_stock_list()
+        log.info("股票列表同步: %d 条", count)
+    except Exception:
+        log.error("股票列表同步失败", exc_info=True)
 
 
 # API 路由

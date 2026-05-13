@@ -1,6 +1,7 @@
 """SQLite 数据库初始化 + CRUD 层（异步，基于 aiosqlite）"""
 
 import json
+import sqlite3
 from datetime import datetime, timezone
 
 import aiosqlite
@@ -87,6 +88,13 @@ async def init_db():
                 content TEXT NOT NULL,
                 filepath TEXT,
                 created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS stock_list (
+                code TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                market TEXT DEFAULT '',
+                updated_at TEXT NOT NULL
             );
         """)
         await db.commit()
@@ -401,3 +409,61 @@ async def get_fra_report(report_id: int) -> dict | None:
         return _row_to_dict(row) if row else None
     finally:
         await db.close()
+
+
+# ---------------------------------------------------------------------------
+# Stock List 缓存
+# ---------------------------------------------------------------------------
+
+async def sync_stock_list():
+    """从数据源同步A股股票列表到数据库。"""
+    import asyncio
+    from datasource import stock as stock_mod
+
+    log.info("开始同步A股股票列表...")
+    try:
+        stocks = await asyncio.to_thread(stock_mod.get_stock_list)
+    except Exception:
+        log.error("获取股票列表失败", exc_info=True)
+        return 0
+
+    if not stocks:
+        log.warning("数据源返回空股票列表")
+        return 0
+
+    now = _now()
+    db = await get_db()
+    try:
+        await db.execute("DELETE FROM stock_list")
+        await db.executemany(
+            "INSERT INTO stock_list (code, name, market, updated_at) VALUES (?, ?, ?, ?)",
+            [
+                (s.get("code", ""), s.get("name", ""), s.get("market", ""), now)
+                for s in stocks
+            ],
+        )
+        await db.commit()
+        log.info("股票列表同步完成: %d 条", len(stocks))
+        return len(stocks)
+    finally:
+        await db.close()
+
+
+def get_cached_stock_list(keyword: str = "", limit: int = 50) -> list[dict]:
+    """从本地缓存查询股票列表（同步，供工具调用）。"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        if keyword:
+            cursor = conn.execute(
+                "SELECT code, name, market FROM stock_list "
+                "WHERE code LIKE ? OR name LIKE ? LIMIT ?",
+                (f"%{keyword}%", f"%{keyword}%", limit),
+            )
+        else:
+            cursor = conn.execute(
+                "SELECT code, name, market FROM stock_list LIMIT ?", (limit,),
+            )
+        return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()

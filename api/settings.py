@@ -50,7 +50,7 @@ async def test_connection(body: dict):
         return {"ok": False, "message": "缺少 API 地址或 Key"}
     try:
         url = api_url.rstrip("/") + "/models"
-        resp = httpx.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=10.0, proxy=None)
+        resp = httpx.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=10.0, proxy=False)
         if resp.status_code == 200:
             log.info("连接测试成功: %s", api_url)
             return {"ok": True, "message": "连接成功"}
