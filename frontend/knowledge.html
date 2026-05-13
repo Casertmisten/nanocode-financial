@@ -581,9 +581,9 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           </div>
           <p class="upload-zone-text">拖拽文件到此处，或 <strong>点击浏览</strong></p>
-          <p class="upload-zone-hint">支持 PDF、Word、TXT、Excel 格式，单文件不超过 50MB</p>
+          <p class="upload-zone-hint">支持 PDF、Word、TXT、Markdown、Excel 格式，单文件不超过 50MB</p>
         </div>
-        <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(event)">
+        <input type="file" id="fileInput" multiple accept=".pdf,.doc,.docx,.txt,.xlsx,.xls,.csv,.md,.markdown" style="display:none" onchange="handleFileSelect(event)">
 
         <div style="margin-top: var(--stack-md);">
           <label style="font: var(--font-label-md); display: block; margin-bottom: var(--stack-sm); color: var(--color-on-surface);">文档分类</label>
@@ -602,162 +602,37 @@
     </div>
   </div>
 
+  <script src="js/api.js"></script>
   <script>
-    // --- 模拟数据 ---
-    const documents = [
-      {
-        id: 1,
-        title: '贵州茅台 2024 年年度报告',
-        source: '上海证券交易所',
-        type: 'financial',
-        date: '2025-03-28',
-        size: '4.2 MB',
-        status: 'parsed',
-        chunks: 156,
-        desc: '包含公司概况、财务数据、经营分析、风险提示等完整年报内容。',
-        tags: ['年报', '白酒']
-      },
-      {
-        id: 2,
-        title: '新能源行业深度研究报告',
-        source: '中信证券研究所',
-        type: 'report',
-        date: '2025-05-08',
-        size: '8.7 MB',
-        status: 'parsed',
-        chunks: 312,
-        desc: '光伏、风电、储能产业链全景分析，涵盖技术路线、竞争格局和投资建议。',
-        tags: ['新能源', '研报']
-      },
-      {
-        id: 3,
-        title: '央行降准政策解读',
-        source: '中国人民银行',
-        type: 'policy',
-        date: '2025-05-06',
-        size: '1.1 MB',
-        status: 'parsed',
-        chunks: 45,
-        desc: '全面降准 0.5 个百分点，释放长期资金约 1 万亿元。附政策要点和影响分析。',
-        tags: ['货币政策', '降准']
-      },
-      {
-        id: 4,
-        title: '比亚迪 Q1 财报分析',
-        source: '公司公告',
-        type: 'financial',
-        date: '2025-04-29',
-        size: '3.5 MB',
-        status: 'parsed',
-        chunks: 128,
-        desc: '一季度营收 1502 亿元，净利润 46 亿元。新能源汽车销量全球第一。',
-        tags: ['季报', '新能源汽车']
-      },
-      {
-        id: 5,
-        title: 'A股市场日报：科技板块领涨',
-        source: '财经网',
-        type: 'news',
-        date: '2025-05-10',
-        size: '0.8 MB',
-        status: 'parsed',
-        chunks: 32,
-        desc: '受AI芯片利好影响，半导体板块集体拉升。沪指收涨 1.2%，深成指涨 1.8%。',
-        tags: ['日报', '科技']
-      },
-      {
-        id: 6,
-        title: '宁德时代全球竞争力分析',
-        source: '华泰证券研究所',
-        type: 'report',
-        date: '2025-04-15',
-        size: '12.3 MB',
-        status: 'parsed',
-        chunks: 478,
-        desc: '动力电池全球市占率 37%，技术壁垒深厚。海外扩产计划及盈利预测。',
-        tags: ['锂电池', '研报']
-      },
-      {
-        id: 7,
-        title: '注册制改革最新政策汇编',
-        source: '证监会',
-        type: 'policy',
-        date: '2025-03-20',
-        size: '2.8 MB',
-        status: 'parsed',
-        chunks: 89,
-        desc: '全面注册制相关法规、实施细则及配套规则汇总。',
-        tags: ['注册制', '政策']
-      },
-      {
-        id: 8,
-        title: '沪深300指数估值周报',
-        source: 'Wind 金融终端',
-        type: 'news',
-        date: '2025-05-09',
-        size: '1.5 MB',
-        status: 'parsed',
-        chunks: 56,
-        desc: '当前PE 12.3x，处于近十年 35% 分位。股债性价比指标偏股方向。',
-        tags: ['指数', '估值']
-      },
-      {
-        id: 9,
-        title: '公募基金一季度持仓分析',
-        source: '天相投顾',
-        type: 'report',
-        date: '2025-04-22',
-        size: '6.1 MB',
-        status: 'parsed',
-        chunks: 201,
-        desc: '偏股基金一季度加仓科技、减仓消费。前十大重仓股及行业配置变化。',
-        tags: ['基金', '持仓']
-      },
-      {
-        id: 10,
-        title: '中国平安综合财报',
-        source: '公司公告',
-        type: 'financial',
-        date: '2025-04-18',
-        size: '5.6 MB',
-        status: 'parsed',
-        chunks: 189,
-        desc: '一季度归母净利润 412 亿。寿险改革效果显现，新业务价值同比增长 28%。',
-        tags: ['保险', '季报']
-      },
-      {
-        id: 11,
-        title: '美联储议息会议纪要',
-        source: 'Federal Reserve',
-        type: 'news',
-        date: '2025-05-07',
-        size: '0.9 MB',
-        status: 'parsed',
-        chunks: 38,
-        desc: '维持利率不变，但释放年内可能降息信号。关注通胀进展和就业数据。',
-        tags: ['美联储', '利率']
-      },
-      {
-        id: 12,
-        title: '半导体产业链全景图',
-        source: '国盛证券',
-        type: 'report',
-        date: '2025-05-02',
-        size: '15.2 MB',
-        status: 'parsed',
-        chunks: 523,
-        desc: '从设计、制造到封测全产业链梳理。国产替代关键环节及核心标的分析。',
-        tags: ['半导体', '产业链']
-      }
-    ];
-
+    // --- 数据加载 ---
+    let documents = [];
     let currentFilter = 'all';
     let currentCategory = 'all';
     let selectedFiles = [];
 
-    // --- 初始化 ---
-    function init() {
-      renderDocs(documents);
+    async function loadDocuments() {
+      try {
+        documents = await api('GET', '/documents');
+        filterDocs();
+        loadStats();
+      } catch (e) {
+        console.error('加载文档失败:', e);
+      }
+    }
+
+    async function loadStats() {
+      try {
+        const stats = await api('GET', '/documents/stats');
+        const cards = document.querySelectorAll('.stat-value');
+        if (cards.length >= 4) {
+          cards[0].textContent = stats.total;
+          cards[1].textContent = stats.ready;
+          cards[2].textContent = stats.pending + stats.processing;
+          cards[3].textContent = documents.reduce((s, d) => s + (d.chunks || 0), 0);
+        }
+      } catch (e) {
+        console.error('加载统计失败:', e);
+      }
     }
 
     // --- 渲染文档 ---
@@ -896,18 +771,12 @@
       if (doc) alert(`下载：${doc.title}\n\n（此功能待连接后端API）`);
     }
 
-    function deleteDoc(id) {
-      const idx = documents.findIndex(d => d.id === id);
-      if (idx === -1) return;
-      const card = document.querySelector(`.doc-card[onclick*="${id}"]`);
-      if (card) {
-        card.style.transition = 'all 0.3s ease';
-        card.style.opacity = '0';
-        card.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-          documents.splice(idx, 1);
-          filterDocs();
-        }, 300);
+    async function deleteDoc(id) {
+      try {
+        await api('DELETE', `/documents/${id}`);
+        await loadDocuments();
+      } catch (e) {
+        console.error('删除失败:', e);
       }
     }
 
@@ -939,6 +808,7 @@
 
     function handleFileSelect(e) {
       selectedFiles = Array.from(e.target.files);
+      console.log('handleFileSelect:', selectedFiles.length, selectedFiles.map(f => f.name));
       showFileList();
     }
 
@@ -955,73 +825,62 @@
       }
     }
 
-    function startUpload() {
+    async function startUpload() {
       if (selectedFiles.length === 0) {
         alert('请先选择文件');
         return;
       }
 
+      const files = [...selectedFiles];
       closeUploadModal();
       const progressEl = document.getElementById('uploadProgress');
       progressEl.classList.add('active');
 
       const category = document.getElementById('uploadCategory').value;
-      const catLabel = getTypeLabel(category);
 
-      selectedFiles.forEach((file, i) => {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const itemEl = document.createElement('div');
         itemEl.className = 'upload-item';
         itemEl.innerHTML = `
           <div class="upload-item-icon">${getTypeIcon(category)}</div>
           <div class="upload-item-info">
             <div class="upload-item-name">${file.name}</div>
-            <div class="upload-item-status" id="status-${i}">上传中... 0%</div>
+            <div class="upload-item-status" id="status-${i}">上传中...</div>
             <div class="upload-progress-bar"><div class="upload-progress-fill" id="progress-${i}" style="width: 0%"></div></div>
           </div>`;
         progressEl.appendChild(itemEl);
 
-        // 模拟上传进度
-        simulateUpload(i, file.name, category, catLabel);
-      });
+        const formData = new FormData();
+        formData.append('files', file);
+        formData.append('category', category);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/documents/upload');
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round(e.loaded / e.total * 100);
+            document.getElementById(`progress-${i}`).style.width = pct + '%';
+            document.getElementById(`status-${i}`).textContent = `上传中... ${pct}%`;
+          }
+        };
+
+        xhr.onload = () => {
+          document.getElementById(`progress-${i}`).style.width = '100%';
+          document.getElementById(`progress-${i}`).classList.add('complete');
+          document.getElementById(`status-${i}`).textContent = '已完成';
+          loadDocuments();
+        };
+
+        xhr.onerror = () => {
+          document.getElementById(`status-${i}`).textContent = '上传失败';
+        };
+
+        xhr.send(formData);
+      }
 
       selectedFiles = [];
-    }
-
-    function simulateUpload(index, fileName, category, catLabel) {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 15 + 5;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(interval);
-
-          document.getElementById(`progress-${index}`).style.width = '100%';
-          document.getElementById(`progress-${index}`).classList.add('complete');
-          document.getElementById(`status-${index}`).textContent = `已完成 · 正在解析`;
-
-          // 模拟解析完成后添加到列表
-          setTimeout(() => {
-            documents.unshift({
-              id: Date.now() + index,
-              title: fileName.replace(/\.[^.]+$/, ''),
-              source: '本地上传',
-              type: category,
-              date: new Date().toISOString().split('T')[0],
-              size: (Math.random() * 10 + 0.5).toFixed(1) + ' MB',
-              status: 'parsed',
-              chunks: Math.floor(Math.random() * 200 + 20),
-              desc: `用户上传的${catLabel}文档，正在解析中...`,
-              tags: [catLabel]
-            });
-            filterDocs();
-
-            document.getElementById(`status-${index}`).textContent = `解析完成`;
-          }, 2000);
-        } else {
-          document.getElementById(`progress-${index}`).style.width = progress + '%';
-          document.getElementById(`status-${index}`).textContent = `上传中... ${Math.round(progress)}%`;
-        }
-      }, 200);
     }
 
     // --- 侧边栏 ---
@@ -1033,7 +892,7 @@
     }
 
     // --- 初始化 ---
-    init();
+    loadDocuments();
   </script>
 </body>
 </html>

@@ -14,8 +14,12 @@ import os
 
 import config
 from rag.indexer import add_to_index, build_fresh_index, get_index
+from rag.loader import load_single_file
 from rag.loader import load_documents
 from rag.retriever import format_results, retrieve
+from utils import BaseLogger
+
+log = BaseLogger.getLogger("rag")
 
 
 def ingest(doc_path: str | None = None) -> int:
@@ -28,8 +32,10 @@ def ingest(doc_path: str | None = None) -> int:
         Number of new documents processed.
     """
     doc_dir = doc_path or config.DOCUMENTS_DIR
+    log.info("开始导入文档目录: %s", doc_dir)
     documents = load_documents(doc_dir)
     if not documents:
+        log.info("目录中无支持的文档: %s", doc_dir)
         return 0
 
     chroma_dir = config.CHROMA_PERSIST_DIR
@@ -54,6 +60,7 @@ def ingest(doc_path: str | None = None) -> int:
             config.EMBEDDING_API_KEY,
             config.EMBEDDING_MODEL,
         )
+        log.info("全新索引构建完成: %d 个文档", count)
         return count
 
 
@@ -80,3 +87,22 @@ def query_formatted(question: str, top_k: int = 5) -> str:
     """Search and return formatted results string (for tool output)."""
     results = query(question, top_k)
     return format_results(results)
+
+
+def ingest_file(file_path: str) -> int:
+    """将单个文件导入知识库（增量索引）。"""
+    log.info("导入单文件: %s", file_path)
+    documents = load_single_file(file_path)
+    if not documents:
+        log.warning("文件加载失败或无内容: %s", file_path)
+        return 0
+
+    index, _ = get_index(
+        config.CHROMA_PERSIST_DIR,
+        config.EMBEDDING_API_URL,
+        config.EMBEDDING_API_KEY,
+        config.EMBEDDING_MODEL,
+    )
+    count = add_to_index(index, documents, config.CHROMA_PERSIST_DIR, os.path.dirname(file_path))
+    log.info("单文件导入完成: %s, 新增=%d", file_path, count)
+    return count

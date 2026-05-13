@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
   <style>
     /* --- 对话页面样式 --- */
 
@@ -593,6 +594,44 @@
         width: calc(100vw - 32px);
       }
     }
+
+    /* Markdown 渲染样式 */
+    .message-content h1, .message-content h2, .message-content h3 {
+      margin: 0.6em 0 0.3em;
+      font-weight: 600;
+    }
+    .message-content h1 { font-size: 1.3em; }
+    .message-content h2 { font-size: 1.15em; }
+    .message-content h3 { font-size: 1.05em; }
+    .message-content p { margin: 0.4em 0; line-height: 1.7; }
+    .message-content ul, .message-content ol { margin: 0.4em 0; padding-left: 1.5em; }
+    .message-content li { margin: 0.15em 0; }
+    .message-content blockquote {
+      margin: 0.5em 0; padding: 0.4em 1em;
+      border-left: 3px solid var(--color-primary);
+      background: var(--color-bg-hover);
+      border-radius: 0 8px 8px 0;
+    }
+    .message-content code {
+      background: var(--color-bg-hover); padding: 0.15em 0.4em;
+      border-radius: 4px; font-size: 0.9em;
+    }
+    .message-content pre {
+      margin: 0.5em 0; padding: 1em;
+      background: #1e1e2e; color: #cdd6f4;
+      border-radius: 8px; overflow-x: auto;
+    }
+    .message-content pre code {
+      background: none; padding: 0; font-size: 0.88em;
+      color: inherit;
+    }
+    .message-content table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
+    .message-content th, .message-content td {
+      border: 1px solid var(--color-border); padding: 0.4em 0.8em; text-align: left;
+    }
+    .message-content th { background: var(--color-bg-hover); font-weight: 600; }
+    .message-content hr { border: none; border-top: 1px solid var(--color-border); margin: 0.8em 0; }
+    .message-content strong { font-weight: 600; }
   </style>
 </head>
 <body>
@@ -616,36 +655,7 @@
 
       <div class="sidebar-section-title">近期对话</div>
 
-      <ul class="sidebar-list" id="chatList">
-        <li class="sidebar-item active" data-id="1">
-          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span class="item-text">贵州茅台 2024 年报分析</span>
-          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(1)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </li>
-        <li class="sidebar-item" data-id="2">
-          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span class="item-text">新能源板块近期走势</span>
-          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(2)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </li>
-        <li class="sidebar-item" data-id="3">
-          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span class="item-text">央行降准对债市的影响</span>
-          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(3)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </li>
-        <li class="sidebar-item" data-id="4">
-          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span class="item-text">沪深300估值分析</span>
-          <button class="item-delete" title="删除" onclick="event.stopPropagation(); deleteChat(4)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </li>
-      </ul>
+      <ul class="sidebar-list" id="chatList"></ul>
 
       <!-- 底部导航 -->
       <nav class="sidebar-nav">
@@ -754,34 +764,41 @@
     </main>
   </div>
 
+  <script src="js/api.js"></script>
   <script>
     // --- 状态管理 ---
     let messages = [];
     let isLoading = false;
-    let currentChatId = 1;
+    let currentChatId = null;
     let selectedKbIds = new Set();
     let currentModel = 'qwen-max';
 
-    // --- 模拟数据 ---
-    const knowledgeBases = [
-      { id: 1, name: 'A股上市公司年报', docs: 128, updated: '2025-01-10' },
-      { id: 2, name: '券商研报精选', docs: 256, updated: '2025-01-15' },
-      { id: 3, name: '宏观经济数据', docs: 64, updated: '2025-01-08' },
-      { id: 4, name: '行业政策法规', docs: 89, updated: '2024-12-20' },
-      { id: 5, name: '基金持仓分析', docs: 45, updated: '2025-01-12' },
-      { id: 6, name: '港股财报数据', docs: 72, updated: '2025-01-05' },
-      { id: 7, name: '期货市场分析', docs: 38, updated: '2024-11-30' },
-      { id: 8, name: '债券市场研究', docs: 53, updated: '2024-12-15' },
-    ];
+    // --- 从 API 加载数据 ---
+    let knowledgeBases = [];
+    let models = [];
 
-    const models = [
-      { id: 'qwen-max', name: 'Qwen-Max', provider: '阿里' },
-      { id: 'qwen-plus', name: 'Qwen-Plus', provider: '阿里' },
-      { id: 'qwen-turbo', name: 'Qwen-Turbo', provider: '阿里' },
-      { id: 'glm-4-plus', name: 'GLM-4-Plus', provider: '智谱' },
-      { id: 'glm-4-flash', name: 'GLM-4-Flash', provider: '智谱' },
-      { id: 'deepseek-v3', name: 'DeepSeek-V3', provider: 'DeepSeek' },
-    ];
+    async function loadInitialData() {
+      try {
+        const [kbData, modelData] = await Promise.all([
+          api('GET', '/knowledge-bases'),
+          api('GET', '/models'),
+        ]);
+        knowledgeBases = kbData;
+        models = modelData;
+        renderKbList();
+        renderModelList();
+        await loadSessionList();
+        // 如果有历史会话，加载最近一个
+        const firstItem = chatList.querySelector('.sidebar-item');
+        if (firstItem) {
+          await loadSession(firstItem.dataset.id);
+        } else {
+          await newChat();
+        }
+      } catch (e) {
+        console.error('加载初始数据失败:', e);
+      }
+    }
 
     // --- DOM 引用 ---
     const chatInput = document.getElementById('chatInput');
@@ -855,7 +872,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             </div>
             <div class="message-body">
-              <div class="message-content">${msg.content}</div>
+              <div class="message-content">${msg.role === 'assistant' ? marked.parse(msg.content) : escapeHtml(msg.content)}</div>
               <div class="message-meta">
                 <span>${time}</span>
               </div>
@@ -870,7 +887,10 @@
       }).join('');
     }
 
-    function simulateReply(userText) {
+    async function simulateReply(userText) {
+      if (!currentChatId) {
+        await newChat();
+      }
       isLoading = true;
 
       // 显示打字指示器
@@ -885,71 +905,170 @@
       messagesContainer.appendChild(typingEl);
       scrollToBottom();
 
-      // 模拟延迟后回复
-      setTimeout(() => {
-        typingEl.remove();
-        const reply = generateMockReply(userText);
-        addMessage('assistant', reply);
-        isLoading = false;
-      }, 1500 + Math.random() * 1000);
-    }
+      let fullReply = '';
+      let streamEl = null;
 
-    function generateMockReply(text) {
-      const replies = [
-        `根据我的分析，以下是关于该问题的回答：<br><br><strong>核心观点：</strong>从当前市场数据来看，该标的整体表现稳健。以下是我的详细分析：<br><br>1. <strong>营收方面</strong>：同比增长 12.3%，超出市场预期。主要驱动力来自主营业务的持续扩张。<br>2. <strong>利润率</strong>：毛利率保持在 45% 以上，净利率约 22%，在同行业中处于领先地位。<br>3. <strong>现金流</strong>：经营性现金流充裕，资产负债率控制在合理范围内。<br><br><em>数据来源：公司年报、Wind 金融终端</em>`,
-        `基于知识库中的研报和最新市场数据，我的分析如下：<br><br><strong>市场概览：</strong>当前市场呈现结构性分化格局。大盘蓝筹相对稳健，中小盘波动加大。<br><br>从<strong>技术面</strong>来看，主要指数处于关键支撑位附近，成交量有所放大。从<strong>基本面</strong>来看，企业盈利增速边际改善，但需关注以下风险：<br><br>- 宏观经济下行压力<br>- 地缘政治不确定性<br>- 流动性环境变化<br><br><em>以上分析仅供参考，不构成投资建议。</em>`,
-      ];
-      return replies[Math.floor(Math.random() * replies.length)];
+      ssePost('/chat', {
+        session_id: currentChatId,
+        message: userText,
+        model: currentModel,
+      }, {
+        onToken: (content) => {
+          fullReply += content;
+          if (!streamEl) {
+            typingEl.remove();
+            // 首次收到 token，创建助手消息 DOM
+            messages.push({ role: 'assistant', content: fullReply, time: new Date(), _finished: false });
+            const div = document.createElement('div');
+            div.className = 'message message-assistant';
+            div.innerHTML = `
+              <div class="message-avatar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              </div>
+              <div class="message-body">
+                <div class="message-content"></div>
+              </div>`;
+            messagesContainer.appendChild(div);
+            streamEl = div.querySelector('.message-content');
+          } else {
+            messages[messages.length - 1].content = fullReply;
+          }
+          streamEl.innerHTML = marked.parse(fullReply);
+          scrollToBottom();
+        },
+        onDone: () => {
+          if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+            messages[messages.length - 1]._finished = true;
+          }
+          typingEl.remove();
+          isLoading = false;
+        },
+        onError: (err) => {
+          typingEl.remove();
+          addMessage('assistant', '抱歉，回复时出现错误：' + err.message);
+          isLoading = false;
+        },
+      });
     }
 
     // --- 对话管理 ---
-    function newChat() {
-      messages = [];
-      messagesContainer.innerHTML = '';
-      welcomeScreen.style.display = 'flex';
-      messagesContainer.style.display = 'none';
-
-      // 取消所有活跃项
-      chatList.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
-      document.querySelector('.top-bar-title').textContent = '新对话';
-    }
-
-    function deleteChat(id) {
-      const item = chatList.querySelector(`[data-id="${id}"]`);
-      if (item) {
-        item.style.transition = 'all 0.2s ease';
-        item.style.opacity = '0';
-        item.style.transform = 'translateX(-10px)';
-        setTimeout(() => item.remove(), 200);
+    async function newChat() {
+      try {
+        const session = await api('POST', '/sessions');
+        currentChatId = session.id;
+        messages = [];
+        messagesContainer.innerHTML = '';
+        welcomeScreen.style.display = 'flex';
+        messagesContainer.style.display = 'none';
+        chatList.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+        document.querySelector('.top-bar-title').textContent = '新对话';
+        await loadSessionList();
+      } catch (e) {
+        console.error('创建会话失败:', e);
       }
     }
 
-    // 切换对话
-    chatList.addEventListener('click', (e) => {
-      const item = e.target.closest('.sidebar-item');
-      if (!item) return;
+    async function deleteChat(id) {
+      try {
+        await api('DELETE', `/sessions/${id}`);
+        await loadSessionList();
+      } catch (e) {
+        console.error('删除会话失败:', e);
+      }
+    }
 
-      chatList.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
-      item.classList.add('active');
-      document.querySelector('.top-bar-title').textContent = item.querySelector('.item-text').textContent;
+    async function renameChat(id, btn) {
+      const li = btn.closest('.sidebar-item');
+      const textEl = li.querySelector('.item-text');
+      const oldTitle = textEl.textContent;
 
-      // 模拟加载历史对话
-      messages = [];
-      welcomeScreen.style.display = 'none';
-      messagesContainer.style.display = 'block';
-      messagesContainer.innerHTML = '';
+      // 隐藏操作按钮，阻止点击切换会话
+      li.classList.add('renaming');
+      li.onclick = null;
 
-      const saved = [
-        { role: 'user', content: '请分析贵州茅台2024年年报的核心财务数据', time: new Date(Date.now() - 3600000) },
-        { role: 'assistant', content: '根据贵州茅台2024年年报数据，核心指标如下：<br><br><strong>营收：</strong>1,741.4亿元，同比+15.7%<br><strong>归母净利：</strong>862.3亿元，同比+13.2%<br><strong>毛利率：</strong>91.5%，同比+0.3pp<br><strong>ROE：</strong>33.8%，保持行业领先<br><br>整体来看，茅台延续了高增长态势，直销渠道占比提升是核心驱动因素。', time: new Date(Date.now() - 3590000) },
-      ];
-      messages = saved;
-      renderMessages();
-      scrollToBottom();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = oldTitle;
+      input.className = 'rename-input';
+      textEl.replaceWith(input);
+      input.focus();
+      input.select();
 
-      // 移动端关闭侧边栏
-      if (window.innerWidth <= 768) toggleSidebar();
-    });
+      let finished = false;
+      const finish = async () => {
+        if (finished) return;
+        finished = true;
+        const newTitle = input.value.trim() || oldTitle;
+        if (newTitle !== oldTitle) {
+          try {
+            await api('PATCH', `/sessions/${id}`, { title: newTitle });
+            if (id === currentChatId) {
+              document.querySelector('.top-bar-title').textContent = newTitle;
+            }
+          } catch (e) {
+            console.error('重命名失败:', e);
+          }
+        }
+        const span = document.createElement('span');
+        span.className = 'item-text';
+        span.textContent = newTitle;
+        input.replaceWith(span);
+        // 恢复按钮和点击事件
+        li.classList.remove('renaming');
+        li.onclick = () => loadSession(id);
+      };
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { input.value = oldTitle; input.blur(); }
+      });
+      input.addEventListener('blur', finish);
+    }
+
+    async function loadSessionList() {
+      try {
+        const sessions = await api('GET', '/sessions');
+        chatList.innerHTML = sessions.map(s => `
+          <li class="sidebar-item ${s.id === currentChatId ? 'active' : ''}" data-id="${s.id}" onclick="loadSession('${s.id}')">
+            <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <span class="item-text">${escapeHtml(s.title)}</span>
+            <button class="item-action" title="重命名" onclick="event.stopPropagation(); renameChat('${s.id}', this)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button class="item-action" title="删除" onclick="event.stopPropagation(); deleteChat('${s.id}')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </li>`).join('');
+      } catch (e) {
+        console.error('加载会话列表失败:', e);
+      }
+    }
+
+    async function loadSession(sessionId) {
+      try {
+        const data = await api('GET', `/sessions/${sessionId}`);
+        currentChatId = sessionId;
+        chatList.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+        const item = chatList.querySelector(`[data-id="${sessionId}"]`);
+        if (item) item.classList.add('active');
+        document.querySelector('.top-bar-title').textContent = data.title;
+
+        messages = [];
+        welcomeScreen.style.display = 'none';
+        messagesContainer.style.display = 'block';
+        messagesContainer.innerHTML = '';
+
+        for (const m of (data.messages || [])) {
+          messages.push({ role: m.role, content: m.content, time: new Date(m.created_at) });
+        }
+        renderMessages();
+        scrollToBottom();
+
+        if (window.innerWidth <= 768) toggleSidebar();
+      } catch (e) {
+        console.error('加载会话失败:', e);
+      }
+    }
 
     // --- 工具函数 ---
     function scrollToBottom() {
@@ -1093,8 +1212,7 @@
     }
 
     // --- 初始化 ---
-    renderKbList();
-    renderModelList();
+    loadInitialData();
   </script>
 </body>
 </html>

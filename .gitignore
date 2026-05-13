@@ -5,3 +5,6 @@ __pycache__/
 
 .ingested.json
 
+data/app.db
+data/uploads/
+
