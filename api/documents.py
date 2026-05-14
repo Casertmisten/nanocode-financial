@@ -5,6 +5,7 @@ import os
 import time
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 import config
 import db
@@ -40,6 +41,34 @@ async def get_document(doc_id: int):
     if isinstance(doc.get("tags"), str):
         doc["tags"] = json.loads(doc["tags"])
     return doc
+
+
+class UpdateDocumentRequest(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    tags: list[str] | None = None
+
+
+@router.put("/{doc_id}")
+async def update_document(doc_id: int, req: UpdateDocumentRequest):
+    doc = await db.get_document(doc_id)
+    if not doc:
+        raise HTTPException(404, "文档不存在")
+    fields = {}
+    if req.title is not None:
+        fields["title"] = req.title
+    if req.description is not None:
+        fields["description"] = req.description
+    if req.tags is not None:
+        fields["tags"] = json.dumps(req.tags, ensure_ascii=False)
+    if not fields:
+        return doc
+    await db.update_document(doc_id, **fields)
+    log.info("文档已更新: id=%d, fields=%s", doc_id, list(fields.keys()))
+    updated = await db.get_document(doc_id)
+    if isinstance(updated.get("tags"), str):
+        updated["tags"] = json.loads(updated["tags"])
+    return updated
 
 
 @router.post("/upload")
