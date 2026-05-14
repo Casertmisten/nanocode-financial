@@ -105,6 +105,7 @@ def rewrite_queries(question: str, n: int = 3, model: str | None = None) -> list
     import re
     cleaned = [re.sub(r"^\d+[\.\)、]\s*", "", v) for v in variants]
     log.info("查询改写完成: 生成 %d 个变体", len(cleaned))
+    log.info("改写查询：%s", cleaned[:n])
     return cleaned[:n]
 
 

@@ -1,6 +1,7 @@
 """Web 入口 — FastAPI 应用，托管前端 + API 路由。"""
 import asyncio
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,16 +20,6 @@ log = BaseLogger.getLogger("web")
 
 _SYNC_STOCKS = os.environ.get("SYNC_STOCKS", "").lower() in ("1", "true", "yes")
 
-app = FastAPI(title="FinAssist", version="0.1.0")
-
-
-@app.on_event("startup")
-async def startup():
-    await db.init_db()
-    log.info("数据库初始化完成")
-    if _SYNC_STOCKS:
-        asyncio.create_task(_sync_stocks())
-
 
 async def _sync_stocks():
     """启动后异步同步股票列表到本地数据库。"""
@@ -37,6 +28,18 @@ async def _sync_stocks():
         log.info("股票列表同步: %d 条", count)
     except Exception:
         log.error("股票列表同步失败", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await db.init_db()
+    log.info("数据库初始化完成")
+    if _SYNC_STOCKS:
+        asyncio.create_task(_sync_stocks())
+    yield
+
+
+app = FastAPI(title="FinAssist", version="0.1.0", lifespan=lifespan)
 
 
 # API 路由
@@ -64,12 +67,11 @@ async def index():
 @app.get("/api/models")
 async def list_models():
     return [
-        {"id": "qwen-max", "name": "Qwen-Max", "provider": "阿里"},
-        {"id": "qwen-plus", "name": "Qwen-Plus", "provider": "阿里"},
-        {"id": "qwen-turbo", "name": "Qwen-Turbo", "provider": "阿里"},
-        {"id": "glm-4-plus", "name": "GLM-4-Plus", "provider": "智谱"},
-        {"id": "glm-4-flash", "name": "GLM-4-Flash", "provider": "智谱"},
-        {"id": "deepseek-v3", "name": "DeepSeek-V3", "provider": "DeepSeek"},
+        {"id": "qwen-max", "name": "Qwen-Max", "provider": "阿里巴巴"},
+        {"id": "qwen-plus", "name": "Qwen-Plus", "provider": "阿里巴巴"},
+        {"id": "qwen3.6-flash", "name": "Qwen3.6-Flash", "provider": "阿里巴巴"},
+        {"id": "deepseek-v4-pro", "name": "DeepSeek-V4-Pro", "provider": "DeepSeek"},
+        {"id": "deepseek-v4-flash", "name": "DeepSeek-V4-Flash", "provider": "DeepSeek"},
     ]
 
 
@@ -79,7 +81,7 @@ async def list_knowledge_bases():
     import json as _json
     docs = await db.list_documents(status="ready")
     tag_map: dict[str, list[dict]] = {}
-    tag_label = {"report": "研究报告", "news": "金融新闻", "analysis": "分析报告"}
+    tag_label = {"financial": "财报数据", "report": "研究报告", "news": "金融新闻", "analysis": "分析报告"}
     for d in docs:
         tags = d.get("tags", "[]")
         if isinstance(tags, str):
