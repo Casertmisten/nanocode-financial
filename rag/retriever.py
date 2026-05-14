@@ -1,7 +1,9 @@
-"""Hybrid retrieval: query rewrite, parallel vector + BM25 recall, RRF fusion, optional reranking.
-   混合检索：查询改写 → 多路并行向量召回 + BM25 召回 → 合并去重 → RRF 融合 → Rerank。
+"""Hybrid retrieval: async multi-query vector + BM25 recall, RRF fusion, optional reranking.
+   混合检索：多路异步向量召回 + BM25 召回 → 合并去重 → RRF 融合 → Rerank。
+   查询改写由调用方负责。
 """
 
+import asyncio
 import json
 import os
 import urllib.request
@@ -17,7 +19,11 @@ from utils import BaseLogger
 log = BaseLogger.getLogger("rag.retriever")
 
 # 每路独立召回数量
-_RECALL_PER_CHANNEL = 40
+_RECALL_PER_CHANNEL = 200
+# RRF 融合后保留条数
+_RRF_TOP = 50
+# Rerank 输入条数
+_RERANK_TOP = 50
 
 
 def _tokenize(text: str) -> list[str]:
@@ -47,14 +53,14 @@ def _bm25_recall(question: str, top_k: int) -> dict[str, float]:
     return {ids[i]: float(bm25_scores[i]) for i in top_indices}
 
 
-def _vector_recall(index, question: str, top_k: int) -> dict[str, float]:
-    """独立向量召回，返回 top_k 个 node_id → score。"""
+async def _async_vector_recall(index, question: str, top_k: int) -> dict[str, float]:
+    """异步向量召回，返回 top_k 个 node_id → score。"""
     retriever = VectorIndexRetriever(index=index, similarity_top_k=top_k)
-    nodes = retriever.retrieve(question)
+    nodes = await retriever.aretrieve(question)
     result = {}
     for nws in nodes:
         result[nws.node.node_id] = nws.score or 0.0
-    log.info("向量召回: 返回 %d 条", len(result))
+    log.info("异步向量召回: query=%s, 返回 %d 条", question[:30], len(result))
     return result
 
 
@@ -102,51 +108,46 @@ def _rerank(query: str, documents: list[str], top_n: int) -> list[dict]:
         return []
 
 
-def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None = None) -> list[dict]:
-    """查询改写 + 并行混合检索 + RRF 融合 + Rerank。
+async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list[str] | None = None, queries: list[str] | None = None) -> list[dict]:
+    """异步并行混合检索 + RRF 融合 + Rerank。
 
-    1. LLM 将问题改写为 3 个变体
-    2. 原问题 + 变体并行向量召回，BM25 仅用原问题
-    3. 多路结果合并去重，RRF 融合
-    4. Reranker 精排输出 top_k
+    1. 每路向量召回各取 top 200，异步并行；合并去重取最高分（同一 node 取 max）
+    2. BM25 召回 top 200
+    3. 向量 + BM25 结果 RRF 融合，取 top 50
+    4. Reranker 精排输出 top_k（默认 20）；无 reranker 时直接用融合分数取 top_k
 
     file_paths: 若提供，仅返回这些文件路径下的结果（匹配 ChromaDB file_name 元数据）。
+    queries: 若提供，异步并行向量召回（含原问题）；否则仅用 question 单路召回。
     """
-    log.info("检索开始: question=%s, top_k=%d", question[:50], top_k)
+    log.info("检索开始: question=%s, top_k=%d, queries=%d", question[:50], top_k, len(queries) if queries else 1)
 
-    # 查询改写
-    queries = [question]
-    try:
-        import llm
-        variants = llm.rewrite_queries(question)
-        queries.extend(variants)
-    except Exception:
-        log.warning("查询改写失败，使用原始问题", exc_info=True)
-    log.info("检索查询: %d 个（原问题 + %d 变体）", len(queries), len(queries) - 1)
+    vec_queries = queries or [question]
 
-    # 多路并行向量召回 + BM25 召回
+    # 异步并行向量召回
+    tasks = [_async_vector_recall(index, q, _RECALL_PER_CHANNEL) for q in vec_queries]
+    recall_results = await asyncio.gather(*tasks)
+
     all_vector_results: dict[str, float] = {}
-    for q in queries:
-        vr = _vector_recall(index, q, _RECALL_PER_CHANNEL)
+    for vr in recall_results:
         for nid, score in vr.items():
-            # 同一 node 取最高分
             all_vector_results[nid] = max(all_vector_results.get(nid, 0), score)
+
     bm25_results = _bm25_recall(question, _RECALL_PER_CHANNEL)
 
     if not all_vector_results and not bm25_results:
         log.info("检索结果为空")
         return []
 
-    # RRF 融合
+    # RRF 融合，取 top 50
     fused = _rrf_fuse(all_vector_results, bm25_results)
-    sorted_ids = sorted(fused, key=fused.get, reverse=True)
+    sorted_ids = sorted(fused, key=fused.get, reverse=True)[:_RRF_TOP]
 
     # 获取 node 文本（从 ChromaDB）
     client = config.get_chroma_client()
     collection = client.get_collection("financial_docs")
 
-    # 有文件过滤时需要获取更多元数据；无过滤时只需 top 20
-    metadata_limit = len(sorted_ids) if file_paths else 20
+    # 有文件过滤时需要获取全部元数据；无过滤时取 top 50
+    metadata_limit = len(sorted_ids) if file_paths else _RRF_TOP
     stored = collection.get(ids=sorted_ids[:metadata_limit], include=["documents", "metadatas"])
 
     id_to_text = {}
@@ -167,8 +168,8 @@ def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None 
             sorted_ids = filtered_ids
             log.info("文件过滤: 候选 %d, 匹配 %d, 允许的文件名=%s", metadata_limit, len(filtered_ids), allowed_stems)
 
-    # Rerank
-    candidate_ids = sorted_ids[:20]
+    # Rerank：取 top 50 进入精排
+    candidate_ids = sorted_ids[:_RERANK_TOP]
     candidate_docs = [id_to_text.get(nid, "") for nid in candidate_ids]
     rerank_results = _rerank(question, candidate_docs, top_n=top_k)
 
@@ -198,13 +199,29 @@ def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None 
     return results
 
 
+def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None = None, queries: list[str] | None = None) -> list[dict]:
+    """同步封装：在已有事件循环中复用，否则新建。"""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        # 已在异步上下文中（如 FastAPI），用线程桥接
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, async_retrieve(index, question, top_k, file_paths, queries)).result()
+    else:
+        return asyncio.run(async_retrieve(index, question, top_k, file_paths, queries))
+
+
 def format_results(results: list[dict]) -> str:
     """Format retrieval results into a readable string for LLM consumption."""
     if not results:
         return "未在本地知识库中找到相关信息。"
 
     parts = [f"从本地知识库检索到 {len(results)} 条相关信息：\n"]
-    for i, r in enumerate(results, 1):
+    for r in results:
         parts.append(f"[来源: {r['source']}，相关度: {r['score']:.4f}]")
         parts.append(f"{r['text']}\n")
     return "\n".join(parts)

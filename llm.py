@@ -96,6 +96,7 @@ def rewrite_queries(question: str, n: int = 3, model: str | None = None) -> list
     ]
     body = _build_body(messages, "", model=model, stream=False)
     body["max_tokens"] = 512
+    body["chat_template_kwargs"] = {"enable_thinking": False}
     log.info("查询改写: question=%s", question[:50])
     resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=30.0, proxy=None)
     resp.raise_for_status()
@@ -105,7 +106,7 @@ def rewrite_queries(question: str, n: int = 3, model: str | None = None) -> list
     import re
     cleaned = [re.sub(r"^\d+[\.\)、]\s*", "", v) for v in variants]
     log.info("查询改写完成: 生成 %d 个变体", len(cleaned))
-    log.info("改写查询：%s", cleaned[:n])
+    log.info("改写后的查询：%s", cleaned[:n])
     return cleaned[:n]
 
 

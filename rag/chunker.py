@@ -1,6 +1,6 @@
-"""Text chunking — heading-aware for Markdown, SentenceSplitter fallback."""
+"""Text chunking — heading-aware + semantic for Markdown, SentenceSplitter fallback."""
 
-from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
+from llama_index.core.node_parser import MarkdownNodeParser, SemanticSplitterNodeParser, SentenceSplitter
 
 # 超过此字符数的标题段落会二次拆分
 _MAX_CHUNK_SIZE = 1500
@@ -15,10 +15,13 @@ def split_documents(
     documents: list,
     chunk_size: int = 1024,
     chunk_overlap: int = 100,
+    embed_model=None,
 ) -> list:
     """按文件类型选择分块策略。
 
-    Markdown → MarkdownNodeParser（按标题层级切分，再对超长段落二次拆分）
+    Markdown → MarkdownNodeParser（按标题层级切分）
+              → SemanticSplitterNodeParser（同层级内语义分块，需 embed_model）
+              → SentenceSplitter 回退（无 embed_model 或单节点超长时）
     其他文件 → SentenceSplitter（按句子切分）
     """
     md_parser = MarkdownNodeParser()
@@ -32,12 +35,26 @@ def split_documents(
 
     nodes = []
 
-    # Markdown: 标题层级分块
+    # Markdown: 标题层级分块 + 语义二次分块
     if md_docs:
         md_nodes = md_parser.get_nodes_from_documents(md_docs)
-        # 对超长段落用 SentenceSplitter 二次拆分
+
+        if embed_model is not None:
+            # 同层级内按语义相似度二次切分
+            semantic_parser = SemanticSplitterNodeParser(
+                embed_model=embed_model,
+                buffer_size=1,
+                breakpoint_percentile_threshold=95,
+            )
+            md_nodes = semantic_parser.build_semantic_nodes_from_nodes(md_nodes)
+        elif _needs_sub_split(md_nodes):
+            # 无嵌入模型时回退到句子切分
+            md_nodes = sentence_splitter(md_nodes)
+
+        # 语义分块后仍可能有超长节点，兜底拆分
         if _needs_sub_split(md_nodes):
             md_nodes = sentence_splitter(md_nodes)
+
         nodes.extend(md_nodes)
 
     # 非 Markdown: 原有策略

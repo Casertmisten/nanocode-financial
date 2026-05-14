@@ -138,6 +138,7 @@ def add_to_index(
     doc_dir: str,
     chunk_size: int = 1024,
     chunk_overlap: int = 100,
+    embed_model=None,
 ) -> int:
     """将新文档/修改后的文档添加到索引中。返回添加的文档数量。
 
@@ -163,7 +164,7 @@ def add_to_index(
         return 0
 
     # Split and insert
-    nodes = split_documents(new_docs, chunk_size, chunk_overlap)
+    nodes = split_documents(new_docs, chunk_size, chunk_overlap, embed_model=embed_model)
     index.insert_nodes(nodes)
     log.info("增量索引完成: %d 个文档, %d 个节点", len(new_docs), len(nodes))
 
@@ -193,7 +194,7 @@ def build_fresh_index(
     vector_store = ChromaVectorStore(chroma_collection=collection)
 
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    nodes = split_documents(documents, chunk_size, chunk_overlap)
+    nodes = split_documents(documents, chunk_size, chunk_overlap, embed_model=embed_model)
 
     index = VectorStoreIndex(
         nodes=nodes,

@@ -404,13 +404,17 @@
       <div class="sidebar-section-title">导航</div>
 
       <ul class="sidebar-list">
-        <li class="sidebar-item" onclick="window.location.href='chat.html'">
+        <li class="sidebar-item active" onclick="scrollToSetting('section-chat')">
           <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span class="item-text">对话</span>
+          <span class="item-text">对话模型</span>
         </li>
-        <li class="sidebar-item" onclick="window.location.href='knowledge.html'">
-          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          <span class="item-text">知识库</span>
+        <li class="sidebar-item" onclick="scrollToSetting('section-embedding')">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <span class="item-text">Embedding与Reranker模型</span>
+        </li>
+        <li class="sidebar-item" onclick="scrollToSetting('section-database')">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          <span class="item-text">数据库设置</span>
         </li>
       </ul>
 
@@ -447,7 +451,7 @@
       <div class="settings-content">
 
         <!-- ====== 对话模型 ====== -->
-        <div class="settings-section">
+        <div class="settings-section" id="section-chat">
           <h2 class="settings-section-title">对话模型</h2>
           <p class="settings-section-desc">配置对话界面使用的 LLM，影响 AI 回复的质量与风格</p>
 
@@ -551,10 +555,10 @@
           </div>
         </div>
 
-        <!-- ====== 文档解析模型 ====== -->
-        <div class="settings-section">
-          <h2 class="settings-section-title">文档解析模型</h2>
-          <p class="settings-section-desc">配置用于知识库文档解析、Embedding 生成的模型服务</p>
+        <!-- ====== Embedding与Reranker模型 ====== -->
+        <div class="settings-section" id="section-embedding">
+          <h2 class="settings-section-title">Embedding与Reranker模型</h2>
+          <p class="settings-section-desc">配置 Embedding 向量编码和 Reranker 重排序模型服务</p>
 
           <div class="settings-card">
             <div class="form-row">
@@ -669,10 +673,10 @@
           </div>
         </div>
 
-        <!-- ====== 通用设置 ====== -->
-        <div class="settings-section">
-          <h2 class="settings-section-title">通用设置</h2>
-          <p class="settings-section-desc">全局偏好配置</p>
+        <!-- ====== 数据库设置 ====== -->
+        <div class="settings-section" id="section-database">
+          <h2 class="settings-section-title">数据库设置</h2>
+          <p class="settings-section-desc">向量数据库与存储配置</p>
 
           <div class="settings-card">
             <div class="form-row">
@@ -973,7 +977,18 @@
       setTimeout(() => toast.classList.remove('show'), 2500);
     }
 
-    // --- 侧边栏 ---
+    // --- 侧边栏跳转 ---
+    function scrollToSetting(sectionId) {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // 更新侧边栏高亮
+        document.querySelectorAll('.sidebar-list .sidebar-item').forEach(item => item.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+      }
+    }
+
+    // --- 侧边栏移动端 ---
     function toggleSidebar() {
       const sidebar = document.getElementById('sidebar');
       const overlay = document.getElementById('mobileOverlay');

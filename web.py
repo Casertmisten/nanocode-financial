@@ -98,7 +98,7 @@ async def list_knowledge_bases():
         })
     doc_list = [
         {"id": d["id"], "title": d["title"],
-         "tags": _json.loads(d["tags"]) if isinstance(d.get("tags"), str) else (d.get("tags") or []),
+         "tags": [tag_label.get(t, t) for t in (_json.loads(d["tags"]) if isinstance(d.get("tags"), str) else (d.get("tags") or []))],
          "file_type": d["file_type"]}
         for d in docs
     ]

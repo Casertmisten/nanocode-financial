@@ -94,18 +94,29 @@ def bash(args):
 
 
 def rag_query_tool(args):
-    """Tool wrapper: search local knowledge base."""
+    """RAG 查询工具，用于查询知识库中的文档。仅在调用此工具时才触发查询改写。"""
     import rag as rag_module
 
     question = args["question"]
     top_k = args.get("top_k", 5)
     file_paths = args.get("file_paths")
     log.info("RAG 查询: question=%s, top_k=%d, file_paths=%s", question[:50], top_k, len(file_paths) if file_paths else "全部")
-    return rag_module.query_formatted(question, top_k, file_paths=file_paths)
+
+    # 查询改写：仅 RAG 工具调用时执行
+    queries = [question]
+    try:
+        import llm
+        variants = llm.rewrite_queries(question)
+        queries.extend(variants)
+        log.info("查询改写完成: %d 路并行（原问题 + %d 变体）", len(queries), len(queries) - 1)
+    except Exception:
+        log.warning("查询改写失败，使用原始问题", exc_info=True)
+
+    return rag_module.query_formatted(question, top_k, file_paths=file_paths, queries=queries)
 
 
 def rag_ingest_tool(args):
-    """Tool wrapper: import documents into knowledge base."""
+    """RAG 导入工具，用于将文档导入知识库。"""
     import rag as rag_module
 
     doc_path = args.get("path") or None
@@ -116,7 +127,7 @@ def rag_ingest_tool(args):
     return f"成功导入 {count} 个新文档到知识库。"
 
 
-# --- Datasource tool implementations ---
+# --- 数据源工具实现 ---
 
 
 def _fmt(data) -> str:
