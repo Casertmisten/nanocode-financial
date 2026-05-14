@@ -1,4 +1,6 @@
-"""Hybrid retrieval: parallel vector + BM25 recall, RRF fusion, optional reranking."""
+"""Hybrid retrieval: query rewrite, parallel vector + BM25 recall, RRF fusion, optional reranking.
+   混合检索：查询改写 → 多路并行向量召回 + BM25 召回 → 合并去重 → RRF 融合 → Rerank。
+"""
 
 import json
 import os
@@ -101,26 +103,42 @@ def _rerank(query: str, documents: list[str], top_n: int) -> list[dict]:
 
 
 def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None = None) -> list[dict]:
-    """并行混合检索 + RRF 融合 + Rerank。
+    """查询改写 + 并行混合检索 + RRF 融合 + Rerank。
 
-    1. 向量、BM25 各独立召回 40 条（并行）
-    2. RRF 融合两路结果
-    3. Reranker 精排输出 top_k
+    1. LLM 将问题改写为 3 个变体
+    2. 原问题 + 变体并行向量召回，BM25 仅用原问题
+    3. 多路结果合并去重，RRF 融合
+    4. Reranker 精排输出 top_k
 
     file_paths: 若提供，仅返回这些文件路径下的结果（匹配 ChromaDB file_name 元数据）。
     """
     log.info("检索开始: question=%s, top_k=%d", question[:50], top_k)
 
-    # 两路并行召回
-    vector_results = _vector_recall(index, question, _RECALL_PER_CHANNEL)
+    # 查询改写
+    queries = [question]
+    try:
+        import llm
+        variants = llm.rewrite_queries(question)
+        queries.extend(variants)
+    except Exception:
+        log.warning("查询改写失败，使用原始问题", exc_info=True)
+    log.info("检索查询: %d 个（原问题 + %d 变体）", len(queries), len(queries) - 1)
+
+    # 多路并行向量召回 + BM25 召回
+    all_vector_results: dict[str, float] = {}
+    for q in queries:
+        vr = _vector_recall(index, q, _RECALL_PER_CHANNEL)
+        for nid, score in vr.items():
+            # 同一 node 取最高分
+            all_vector_results[nid] = max(all_vector_results.get(nid, 0), score)
     bm25_results = _bm25_recall(question, _RECALL_PER_CHANNEL)
 
-    if not vector_results and not bm25_results:
+    if not all_vector_results and not bm25_results:
         log.info("检索结果为空")
         return []
 
     # RRF 融合
-    fused = _rrf_fuse(vector_results, bm25_results)
+    fused = _rrf_fuse(all_vector_results, bm25_results)
     sorted_ids = sorted(fused, key=fused.get, reverse=True)
 
     # 获取 node 文本（从 ChromaDB）

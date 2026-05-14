@@ -6,6 +6,7 @@ import json
 import os
 import re
 import config
+from prompts.main_prompts import system_prompt as _SYSTEM_PROMPT_TEMPLATE
 from tools import make_schema, run_tool
 
 
@@ -36,12 +37,8 @@ def render_markdown(text):
 
 
 def load_system_prompt() -> str:
-    """加载系统提示词，优先从 prompts/rag_system.txt，否则用默认。"""
-    prompt_path = os.path.join(config.BASE_DIR, "prompts", "rag_system.txt")
-    if os.path.exists(prompt_path):
-        with open(prompt_path, "r") as f:
-            return f.read().replace("{cwd}", os.getcwd())
-    return f"你是一个金融分析助手。当前工作目录: {os.getcwd()}"
+    """加载系统提示词。"""
+    return _SYSTEM_PROMPT_TEMPLATE.replace("{cwd}", os.getcwd())
 
 
 def _run_agentic_loop(messages, system_prompt):

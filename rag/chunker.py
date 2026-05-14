@@ -19,7 +19,7 @@ def split_documents(
     """按文件类型选择分块策略。
 
     Markdown → MarkdownNodeParser（按标题层级切分，再对超长段落二次拆分）
-    其他文件 → SentenceSplitter
+    其他文件 → SentenceSplitter（按句子切分）
     """
     md_parser = MarkdownNodeParser()
     sentence_splitter = SentenceSplitter(
