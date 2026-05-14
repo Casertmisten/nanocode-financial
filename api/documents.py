@@ -1,5 +1,6 @@
 """文档管理路由 — 上传、列表、删除、统计。"""
 
+import asyncio
 import json
 import os
 import time
@@ -101,15 +102,23 @@ async def upload_documents(
         try:
             await db.update_document(doc_id, status="processing")
             import rag
-            count = rag.ingest_file(filepath)
-            chunks_approx = max(1, len(content) // 500)
-            await db.update_document(doc_id, status="ready", chunks=chunks_approx)
-            log.info("文档索引完成: id=%d, ingest=%d, chunks≈%d", doc_id, count, chunks_approx)
+
+            if file_type == "pdf":
+                # PDF 通过 MinerU 解析耗时较长，在后台线程执行
+                results.append({"id": doc_id, "filename": filename, "status": "processing"})
+                asyncio.ensure_future(
+                    _ingest_pdf_background(doc_id, filepath)
+                )
+            else:
+                count = rag.ingest_file(filepath)
+                chunks_approx = max(1, len(content) // 500)
+                await db.update_document(doc_id, status="ready", chunks=chunks_approx)
+                log.info("文档索引完成: id=%d, ingest=%d, chunks≈%d", doc_id, count, chunks_approx)
+                results.append({"id": doc_id, "filename": filename, "status": "ready"})
         except Exception as e:
             log.error("文档索引失败: id=%d, error=%s", doc_id, e, exc_info=True)
             await db.update_document(doc_id, status="error", error_message=str(e))
-
-        results.append({"id": doc_id, "filename": filename, "status": "ready"})
+            results.append({"id": doc_id, "filename": filename, "status": "error"})
 
     return results
 
@@ -125,3 +134,16 @@ async def delete_document(doc_id: int):
     await db.delete_document(doc_id)
     log.info("已删除文档记录: id=%d", doc_id)
     return {"ok": True}
+
+
+async def _ingest_pdf_background(doc_id: int, filepath: str):
+    """在后台线程中完成 PDF → MinerU 解析 → RAG 索引。"""
+    try:
+        import rag
+        loop = asyncio.get_event_loop()
+        count = await loop.run_in_executor(None, rag.ingest_file, filepath)
+        await db.update_document(doc_id, status="ready", chunks=max(1, count))
+        log.info("PDF 后台索引完成: id=%d, chunks=%d", doc_id, count)
+    except Exception as e:
+        log.error("PDF 后台索引失败: id=%d, error=%s", doc_id, e, exc_info=True)
+        await db.update_document(doc_id, status="error", error_message=str(e))

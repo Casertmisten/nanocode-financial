@@ -39,6 +39,20 @@ def get_chroma_client():
     import chromadb
     return chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
 
+# --- MinerU PDF 解析 ---
+MINERU_ACC_URL = os.environ.get("MinerU_ACC_URL", "https://mineru.net/api/v4/extract/task")
+MINERU_ACC_KEY = os.environ.get("MinerU_ACC_KEY", "")
+MINERU_MODEL_VERSION = os.environ.get("MinerU_MODEL_VERSION", "vlm")
+MINERU_LIGHT_URL = os.environ.get("MinerU_LIGHT_URL", "https://mineru.net/api/v1/agent/parse/url")
+MINERU_LIGHT_FILE_URL = "https://mineru.net/api/v1/agent/parse/file"
+MINERU_ACC_FILE_URL = "https://mineru.net/api/v4/file-urls/batch"
+# MinerU 解析超时（秒）和轮询间隔（秒）
+MINERU_TIMEOUT = int(os.environ.get("MINERU_TIMEOUT", "300"))
+MINERU_POLL_INTERVAL = int(os.environ.get("MINERU_POLL_INTERVAL", "3"))
+# 轻量级解析限制
+MINERU_LIGHT_MAX_SIZE = 10 * 1024 * 1024  # 10MB
+MINERU_LIGHT_MAX_PAGES = 20
+
 # --- AKShare 数据源 ---
 AKSHARE_CACHE_TTL = int(os.environ.get("AKSHARE_CACHE_TTL", "3600"))
 

@@ -137,6 +137,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      position: relative;
     }
 
     .doc-card:hover {
@@ -321,79 +322,123 @@
       color: var(--color-outline);
     }
 
-    /* 上传进度 */
-    .upload-progress {
-      display: none;
-      margin-bottom: var(--stack-lg);
+    /* Toast 提示 */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
-    .upload-progress.active {
-      display: block;
-    }
-
-    .upload-item {
+    .toast {
       display: flex;
       align-items: center;
-      gap: var(--stack-md);
-      padding: var(--stack-sm) var(--stack-md);
+      gap: 10px;
+      padding: 12px 18px;
       background: var(--color-surface-container-lowest);
       border: 1px solid var(--color-border);
       border-radius: var(--radius);
-      margin-bottom: var(--stack-sm);
-      animation: messageIn 0.3s ease-out;
+      box-shadow: var(--shadow-hover);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-on-surface);
+      animation: toastIn 0.3s ease-out;
+      transition: opacity 0.3s ease, transform 0.3s ease;
     }
 
-    @keyframes messageIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
+    .toast.fade-out {
+      opacity: 0;
+      transform: translateX(20px);
     }
 
-    .upload-item-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: var(--radius-sm);
-      background: var(--color-surface-container);
+    .toast-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
 
-    .upload-item-info {
-      flex: 1;
-      min-width: 0;
+    .toast-success .toast-icon {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--color-success);
     }
 
-    .upload-item-name {
+    .toast-error .toast-icon {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--color-danger);
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(40px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* 文档卡片解析进度覆盖层 */
+    .doc-card-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.88);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius);
+      z-index: 2;
+      gap: 10px;
+      backdrop-filter: blur(2px);
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      animation: spinner-rotate 1.4s linear infinite;
+    }
+
+    .spinner circle {
+      stroke: var(--color-primary);
+      stroke-linecap: round;
+      animation: spinner-dash 1.4s ease-in-out infinite;
+    }
+
+    .overlay-status {
       font-size: 13px;
       font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .upload-item-status {
-      font: var(--font-caption);
       color: var(--color-on-surface-variant);
     }
 
-    .upload-progress-bar {
-      height: 3px;
-      background: var(--color-surface-container);
-      border-radius: 2px;
-      margin-top: 6px;
-      overflow: hidden;
+    .overlay-status.error {
+      color: var(--color-danger);
     }
 
-    .upload-progress-fill {
-      height: 100%;
-      background: var(--color-primary);
-      border-radius: 2px;
-      transition: width 0.3s ease;
+    .doc-card-overlay.fade-out {
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
     }
 
-    .upload-progress-fill.complete {
-      background: var(--color-success);
+    @keyframes spinner-rotate {
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes spinner-dash {
+      0% {
+        stroke-dasharray: 1, 150;
+        stroke-dashoffset: 0;
+      }
+      50% {
+        stroke-dasharray: 90, 150;
+        stroke-dashoffset: -35;
+      }
+      100% {
+        stroke-dasharray: 90, 150;
+        stroke-dashoffset: -124;
+      }
     }
 
     /* 编辑弹窗 */
@@ -607,9 +652,6 @@
           </div>
         </div>
 
-        <!-- 上传进度 -->
-        <div class="upload-progress" id="uploadProgress"></div>
-
         <!-- 文档网格 -->
         <div class="docs-grid" id="docsGrid"></div>
       </div>
@@ -688,6 +730,9 @@
     </div>
   </div>
 
+  <!-- Toast 容器 -->
+  <div class="toast-container" id="toastContainer"></div>
+
   <script src="js/api.js"></script>
   <script>
     // --- 数据加载 ---
@@ -747,9 +792,25 @@
         const typeClass = getTypeClass(doc.type);
         const typeIcon = getTypeIcon(doc.type);
         const typeLabel = getTypeLabel(doc.type);
+        const isProcessing = doc.status === 'processing' || doc.status === 'pending';
+        const isError = doc.status === 'error';
+
+        // 解析进度覆盖层
+        const overlay = isProcessing ? `
+          <div class="doc-card-overlay" id="overlay-${doc.id}">
+            <svg class="spinner" viewBox="0 0 50 50">
+              <circle cx="25" cy="25" r="20" fill="none" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+            <span class="overlay-status">正在解析文档...</span>
+          </div>` : isError ? `
+          <div class="doc-card-overlay" id="overlay-${doc.id}">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-danger)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span class="overlay-status error">解析失败</span>
+          </div>` : '';
 
         return `
-          <div class="doc-card" data-type="${doc.type}" onclick="openEditModal(\${doc.id})">
+          <div class="doc-card" data-type="${doc.type}" onclick="${!isProcessing && !isError ? `openEditModal(${doc.id})` : ''}">
+            ${overlay}
             <div class="doc-card-header">
               <div class="doc-type-icon ${typeClass}">
                 ${typeIcon}
@@ -780,7 +841,7 @@
                 <span style="margin: 0 4px;">·</span>
                 <span>${doc.size}</span>
                 <span style="margin: 0 4px;">·</span>
-                <span>${doc.chunks} 段</span>
+                <span>${isProcessing ? '解析中' : (doc.chunks || 0) + ' 段'}</span>
               </div>
               <div class="doc-card-tags">
                 <span class="tag ${typeClass === 'doc-type-report' ? 'tag-blue' : typeClass === 'doc-type-news' ? 'tag-green' : typeClass === 'doc-type-data' ? 'tag-orange' : 'tag-gray'}">${typeLabel}</span>
@@ -966,24 +1027,9 @@
 
       const files = [...selectedFiles];
       closeUploadModal();
-      const progressEl = document.getElementById('uploadProgress');
-      progressEl.classList.add('active');
-
       const category = document.getElementById('uploadCategory').value;
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const itemEl = document.createElement('div');
-        itemEl.className = 'upload-item';
-        itemEl.innerHTML = `
-          <div class="upload-item-icon">${getTypeIcon(category)}</div>
-          <div class="upload-item-info">
-            <div class="upload-item-name">${file.name}</div>
-            <div class="upload-item-status" id="status-${i}">上传中...</div>
-            <div class="upload-progress-bar"><div class="upload-progress-fill" id="progress-${i}" style="width: 0%"></div></div>
-          </div>`;
-        progressEl.appendChild(itemEl);
-
+      for (const file of files) {
         const formData = new FormData();
         formData.append('files', file);
         formData.append('category', category);
@@ -991,29 +1037,70 @@
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/documents/upload');
 
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round(e.loaded / e.total * 100);
-            document.getElementById(`progress-${i}`).style.width = pct + '%';
-            document.getElementById(`status-${i}`).textContent = `上传中... ${pct}%`;
-          }
-        };
-
         xhr.onload = () => {
-          document.getElementById(`progress-${i}`).style.width = '100%';
-          document.getElementById(`progress-${i}`).classList.add('complete');
-          document.getElementById(`status-${i}`).textContent = '已完成';
+          try {
+            const results = JSON.parse(xhr.responseText);
+            const result = results[0];
+            if (result && result.status === 'processing') {
+              showToast(`${file.name} 上传成功，正在解析...`);
+              pollDocStatus(result.id);
+            } else {
+              showToast(`${file.name} 上传成功`);
+            }
+          } catch(e) {
+            showToast(`${file.name} 上传成功`);
+          }
           loadDocuments();
         };
 
         xhr.onerror = () => {
-          document.getElementById(`status-${i}`).textContent = '上传失败';
+          showToast(`${file.name} 上传失败`, 'error');
         };
 
         xhr.send(formData);
       }
 
       selectedFiles = [];
+    }
+
+    // --- Toast 提示 ---
+    function showToast(msg, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `
+        <div class="toast-icon">
+          ${type === 'success'
+            ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+            : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+          }
+        </div>
+        <span>${msg}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // --- 解析状态轮询 ---
+    function pollDocStatus(docId) {
+      const poll = async () => {
+        try {
+          const doc = await api('GET', `/documents/${docId}`);
+          if (doc.status === 'ready' || doc.status === 'error') {
+            loadDocuments();
+            loadStats();
+            return;
+          }
+          setTimeout(poll, 3000);
+        } catch(e) {
+          console.error('轮询文档状态失败:', e);
+          setTimeout(poll, 5000);
+        }
+      };
+      // 首次延迟 2 秒开始轮询
+      setTimeout(poll, 2000);
     }
 
     // --- 侧边栏 ---
