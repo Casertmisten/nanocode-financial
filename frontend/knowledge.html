@@ -396,6 +396,56 @@
       background: var(--color-success);
     }
 
+    /* 编辑弹窗 */
+    .edit-form-group {
+      margin-bottom: var(--stack-md);
+    }
+
+    .edit-form-group label {
+      display: block;
+      font: var(--font-label-md);
+      margin-bottom: var(--stack-sm);
+      color: var(--color-on-surface);
+    }
+
+    .edit-form-group .input-field {
+      width: 100%;
+    }
+
+    .edit-form-group textarea.input-field {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .tag-selector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--stack-sm);
+    }
+
+    .tag-option {
+      padding: 6px 14px;
+      border-radius: calc(var(--radius) - 2px);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--color-border);
+      background: var(--color-surface-container-lowest);
+      color: var(--color-on-surface-variant);
+      transition: all var(--transition-fast);
+    }
+
+    .tag-option:hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+    }
+
+    .tag-option.selected {
+      background: var(--color-primary);
+      color: #fff;
+      border-color: var(--color-primary);
+    }
+
     /* 空状态 */
     .empty-state {
       padding: 80px var(--stack-lg);
@@ -602,6 +652,42 @@
     </div>
   </div>
 
+  <!-- 编辑文档弹窗 -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>编辑文档</h3>
+        <button class="btn-icon" onclick="closeEditModal()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="edit-form-group">
+          <label>文档名称</label>
+          <input type="text" class="input-field" id="editTitle" placeholder="输入文档名称">
+        </div>
+        <div class="edit-form-group">
+          <label>文档简介</label>
+          <textarea class="input-field" id="editDesc" placeholder="输入文档简介"></textarea>
+        </div>
+        <div class="edit-form-group">
+          <label>文档标签</label>
+          <div class="tag-selector" id="tagSelector">
+            <span class="tag-option" data-tag="report" onclick="toggleTagOption(this)">研究报告</span>
+            <span class="tag-option" data-tag="financial" onclick="toggleTagOption(this)">财报数据</span>
+            <span class="tag-option" data-tag="news" onclick="toggleTagOption(this)">金融新闻</span>
+            <span class="tag-option" data-tag="policy" onclick="toggleTagOption(this)">政策法规</span>
+            <span class="tag-option" data-tag="analysis" onclick="toggleTagOption(this)">分析报告</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeEditModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveEdit()">保存</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/api.js"></script>
   <script>
     // --- 数据加载 ---
@@ -612,7 +698,16 @@
 
     async function loadDocuments() {
       try {
-        documents = await api('GET', '/documents');
+        const raw = await api('GET', '/documents');
+        documents = raw.map(d => ({
+          ...d,
+          type: (d.tags && d.tags[0]) || 'report',
+          desc: d.description || '暂无简介',
+          date: (d.created_at || '').slice(0, 10),
+          size: d.file_size > 1048576 ? (d.file_size / 1048576).toFixed(1) + ' MB'
+              : d.file_size > 1024 ? (d.file_size / 1024).toFixed(0) + ' KB'
+              : (d.file_size || 0) + ' B',
+        }));
         filterDocs();
         loadStats();
       } catch (e) {
@@ -654,7 +749,7 @@
         const typeLabel = getTypeLabel(doc.type);
 
         return `
-          <div class="doc-card" data-type="${doc.type}" onclick="viewDoc(${doc.id})">
+          <div class="doc-card" data-type="${doc.type}" onclick="openEditModal(\${doc.id})">
             <div class="doc-card-header">
               <div class="doc-type-icon ${typeClass}">
                 ${typeIcon}
@@ -664,6 +759,9 @@
                 <div class="doc-card-source">${doc.source}</div>
               </div>
               <div class="doc-card-actions">
+                <button class="doc-action-btn" title="编辑" onclick="event.stopPropagation(); openEditModal(${doc.id})">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
                 <button class="doc-action-btn" title="下载" onclick="event.stopPropagation(); downloadDoc(${doc.id})">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </button>
@@ -759,10 +857,45 @@
     }
 
     // --- 操作 ---
-    function viewDoc(id) {
+    let editingDocId = null;
+
+    function openEditModal(id) {
       const doc = documents.find(d => d.id === id);
-      if (doc) {
-        alert(`查看文档：${doc.title}\n\n（此功能待连接后端API）`);
+      if (!doc) return;
+      editingDocId = id;
+      document.getElementById('editTitle').value = doc.title || '';
+      document.getElementById('editDesc').value = doc.description || '';
+      // 设置标签选中状态
+      const tags = (doc.tags || []);
+      document.querySelectorAll('#tagSelector .tag-option').forEach(el => {
+        el.classList.toggle('selected', tags.includes(el.dataset.tag));
+      });
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').classList.remove('active');
+      editingDocId = null;
+    }
+
+    function toggleTagOption(el) {
+      el.classList.toggle('selected');
+    }
+
+    async function saveEdit() {
+      if (!editingDocId) return;
+      const title = document.getElementById('editTitle').value.trim();
+      const description = document.getElementById('editDesc').value.trim();
+      const tags = Array.from(document.querySelectorAll('#tagSelector .tag-option.selected'))
+        .map(el => el.dataset.tag);
+      if (!title) { alert('名称不能为空'); return; }
+      try {
+        await api('PUT', `/documents/${editingDocId}`, { title, description, tags });
+        closeEditModal();
+        await loadDocuments();
+      } catch (e) {
+        console.error('保存失败:', e);
+        alert('保存失败: ' + e.message);
       }
     }
 
