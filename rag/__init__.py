@@ -64,12 +64,13 @@ def ingest(doc_path: str | None = None) -> int:
         return count
 
 
-def query(question: str, top_k: int = 5) -> list[dict]:
+def query(question: str, top_k: int = 5, file_paths: list[str] | None = None) -> list[dict]:
     """Search the knowledge base for relevant information.
 
     Args:
         question: Natural language question.
         top_k: Number of results to return.
+        file_paths: 若提供，仅返回这些文件路径下的结果。
 
     Returns:
         List of {"text": str, "source": str, "score": float}.
@@ -80,12 +81,12 @@ def query(question: str, top_k: int = 5) -> list[dict]:
         config.EMBEDDING_API_KEY,
         config.EMBEDDING_MODEL,
     )
-    return retrieve(index, question, top_k)
+    return retrieve(index, question, top_k, file_paths=file_paths)
 
 
-def query_formatted(question: str, top_k: int = 5) -> str:
+def query_formatted(question: str, top_k: int = 5, file_paths: list[str] | None = None) -> str:
     """Search and return formatted results string (for tool output)."""
-    results = query(question, top_k)
+    results = query(question, top_k, file_paths=file_paths)
     return format_results(results)
 
 

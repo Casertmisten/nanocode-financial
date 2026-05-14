@@ -377,8 +377,8 @@
       position: absolute;
       bottom: 100%;
       left: 0;
-      width: 320px;
-      max-height: 360px;
+      width: 340px;
+      max-height: 400px;
       margin-bottom: 8px;
       background: var(--color-surface-container-lowest);
       border: 1px solid var(--color-border);
@@ -392,6 +392,33 @@
       transition: all var(--transition-fast);
       z-index: 20;
       overflow: hidden;
+    }
+
+    .kb-panel-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .kb-tab {
+      flex: 1;
+      padding: 8px 0;
+      border: none;
+      background: none;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-outline);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all var(--transition-fast);
+    }
+
+    .kb-tab:hover {
+      color: var(--color-on-surface);
+    }
+
+    .kb-tab.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
     }
 
     .kb-panel.active {
@@ -484,6 +511,15 @@
       font-size: 11px;
       color: var(--color-outline);
       margin-top: 1px;
+    }
+
+    .kb-selected-names {
+      font-size: 11px;
+      color: var(--color-outline);
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     /* 模型选择面板 */
@@ -736,6 +772,7 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
             <span>知识库</span>
             <span class="selected-tag" id="kbCount" style="display:none">0</span>
+            <span class="kb-selected-names" id="kbSelectedNames"></span>
           </button>
           <!-- 模型选择 -->
           <button class="toolbar-btn" id="btnModel" onclick="togglePanel('model')">
@@ -745,9 +782,13 @@
 
           <!-- 知识库弹出面板 -->
           <div class="kb-panel" id="kbPanel">
+            <div class="kb-panel-tabs">
+              <button class="kb-tab active" data-tab="category" onclick="switchKbTab('category')">知识库</button>
+              <button class="kb-tab" data-tab="document" onclick="switchKbTab('document')">文档</button>
+            </div>
             <div class="kb-panel-search" style="position:relative">
               <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" placeholder="搜索知识库..." id="kbSearch" oninput="filterKbList()">
+              <input type="text" placeholder="搜索..." id="kbSearch" oninput="filterKbList()">
             </div>
             <div class="kb-panel-list" id="kbList"></div>
           </div>
@@ -770,11 +811,14 @@
     let messages = [];
     let isLoading = false;
     let currentChatId = null;
-    let selectedKbIds = new Set();
+    let selectedDocIds = new Set();  // 选中的文档 ID
+    let selectedKbIds = new Set();   // 选中的知识库分类 ID
     let currentModel = 'qwen-max';
+    let currentKbTab = 'category';   // 当前 Tab: category | document
 
     // --- 从 API 加载数据 ---
-    let knowledgeBases = [];
+    let kbCategories = [];
+    let kbDocuments = [];
     let models = [];
 
     async function loadInitialData() {
@@ -783,7 +827,8 @@
           api('GET', '/knowledge-bases'),
           api('GET', '/models'),
         ]);
-        knowledgeBases = kbData;
+        kbCategories = kbData.categories || [];
+        kbDocuments = kbData.documents || [];
         models = modelData;
         renderKbList();
         renderModelList();
@@ -912,6 +957,7 @@
         session_id: currentChatId,
         message: userText,
         model: currentModel,
+        doc_ids: getSelectedDocIds(),
       }, {
         onToken: (content) => {
           fullReply += content;
@@ -1143,47 +1189,116 @@
     });
 
     // --- 知识库列表渲染 ---
+    function switchKbTab(tab) {
+      currentKbTab = tab;
+      document.querySelectorAll('.kb-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      renderKbList(document.getElementById('kbSearch').value);
+    }
+
     function renderKbList(filter = '') {
       const list = document.getElementById('kbList');
       const keyword = filter.toLowerCase();
-      const filtered = knowledgeBases.filter(kb =>
-        kb.name.toLowerCase().includes(keyword)
-      );
 
-      if (filtered.length === 0) {
-        list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--color-outline);font-size:13px;">未找到匹配的知识库</div>';
-        return;
+      if (currentKbTab === 'category') {
+        const filtered = kbCategories.filter(c => c.name.toLowerCase().includes(keyword));
+        if (filtered.length === 0) {
+          list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--color-outline);font-size:13px;">暂无知识库分类</div>';
+          return;
+        }
+        list.innerHTML = filtered.map(c => `
+          <label class="kb-item">
+            <input type="checkbox" value="${c.id}" ${selectedKbIds.has(c.id) ? 'checked' : ''} onchange="toggleKbCategory('${c.id}')">
+            <div class="kb-item-info">
+              <div class="kb-item-name">${c.name}</div>
+              <div class="kb-item-meta">${c.docs} 文档 · 更新于 ${c.updated}</div>
+            </div>
+          </label>
+        `).join('');
+      } else {
+        const filtered = kbDocuments.filter(d => d.title.toLowerCase().includes(keyword));
+        if (filtered.length === 0) {
+          list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--color-outline);font-size:13px;">暂无文档</div>';
+          return;
+        }
+        list.innerHTML = filtered.map(d => `
+          <label class="kb-item">
+            <input type="checkbox" value="${d.id}" ${selectedDocIds.has(d.id) ? 'checked' : ''} onchange="toggleDoc(${d.id})">
+            <div class="kb-item-info">
+              <div class="kb-item-name">${d.title}</div>
+              <div class="kb-item-meta">${d.file_type}${Array.isArray(d.tags) && d.tags.length ? ' · ' + d.tags.join(', ') : ''}</div>
+            </div>
+          </label>
+        `).join('');
       }
-
-      list.innerHTML = filtered.map(kb => `
-        <label class="kb-item">
-          <input type="checkbox" value="${kb.id}" ${selectedKbIds.has(kb.id) ? 'checked' : ''} onchange="toggleKb(${kb.id})">
-          <div class="kb-item-info">
-            <div class="kb-item-name">${kb.name}</div>
-            <div class="kb-item-meta">${kb.docs} 文档 · 更新于 ${kb.updated}</div>
-          </div>
-        </label>
-      `).join('');
     }
 
-    function toggleKb(id) {
+    function toggleKbCategory(id) {
       if (selectedKbIds.has(id)) {
         selectedKbIds.delete(id);
       } else {
         selectedKbIds.add(id);
+        // 选中分类时，自动选中该分类下所有文档
+        const cat = kbCategories.find(c => c.id === id);
+        if (cat && cat.doc_ids) {
+          cat.doc_ids.forEach(did => selectedDocIds.add(did));
+        }
+      }
+      // 取消选中分类时，移除该分类下的文档
+      if (!selectedKbIds.has(id)) {
+        const cat = kbCategories.find(c => c.id === id);
+        if (cat && cat.doc_ids) {
+          cat.doc_ids.forEach(did => {
+            // 只移除不属于其他选中分类的文档
+            const inOther = kbCategories.some(c => c.id !== id && selectedKbIds.has(c.id) && c.doc_ids?.includes(did));
+            if (!inOther) selectedDocIds.delete(did);
+          });
+        }
+      }
+      updateKbCount();
+      renderKbList(document.getElementById('kbSearch').value);
+    }
+
+    function toggleDoc(id) {
+      if (selectedDocIds.has(id)) {
+        selectedDocIds.delete(id);
+      } else {
+        selectedDocIds.add(id);
       }
       updateKbCount();
     }
 
     function updateKbCount() {
       const countEl = document.getElementById('kbCount');
-      const count = selectedKbIds.size;
+      const namesEl = document.getElementById('kbSelectedNames');
+      const count = selectedDocIds.size;
       if (count > 0) {
         countEl.textContent = count;
         countEl.style.display = 'inline-flex';
+        // 显示选中的分类名或文档名
+        const names = [];
+        selectedKbIds.forEach(id => {
+          const cat = kbCategories.find(c => c.id === id);
+          if (cat) names.push(cat.name);
+        });
+        if (names.length === 0) {
+          // 只选了文档没选分类
+          const docNames = [];
+          selectedDocIds.forEach(id => {
+            const doc = kbDocuments.find(d => d.id === id);
+            if (doc) docNames.push(doc.title);
+          });
+          namesEl.textContent = docNames.slice(0, 2).join(', ') + (docNames.length > 2 ? '...' : '');
+        } else {
+          namesEl.textContent = names.join(', ');
+        }
       } else {
         countEl.style.display = 'none';
+        namesEl.textContent = '';
       }
+    }
+
+    function getSelectedDocIds() {
+      return Array.from(selectedDocIds);
     }
 
     function filterKbList() {
