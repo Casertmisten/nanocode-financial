@@ -126,21 +126,28 @@ def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None 
     # 获取 node 文本（从 ChromaDB）
     client = config.get_chroma_client()
     collection = client.get_collection("financial_docs")
-    stored = collection.get(ids=sorted_ids[:20], include=["documents", "metadatas"])
+
+    # 有文件过滤时需要获取更多元数据；无过滤时只需 top 20
+    metadata_limit = len(sorted_ids) if file_paths else 20
+    stored = collection.get(ids=sorted_ids[:metadata_limit], include=["documents", "metadatas"])
 
     id_to_text = {}
     id_to_source = {}
     for nid, doc, meta in zip(stored["ids"], stored["documents"], stored["metadatas"]):
         id_to_text[nid] = doc
-        id_to_source[nid] = meta.get("file_name", "unknown") if meta else "unknown"
+        id_to_source[nid] = meta.get("file_name", "") if meta else ""
 
-    # 按文件路径过滤
+    # 按文件路径过滤（比较不含扩展名的文件名，兼容 PDF→MD 转换）
     if file_paths:
-        allowed_names = {os.path.basename(p) for p in file_paths}
-        filtered_ids = [nid for nid in sorted_ids if id_to_source.get(nid, "") in allowed_names or id_to_source.get(nid, "unknown") == "unknown"]
+        allowed_stems = {os.path.splitext(os.path.basename(p))[0] for p in file_paths}
+        filtered_ids = [
+            nid for nid in sorted_ids
+            if nid in id_to_source
+            and os.path.splitext(id_to_source[nid])[0] in allowed_stems
+        ]
         if filtered_ids:
             sorted_ids = filtered_ids
-            log.info("文件过滤: 输入 %d, 过滤后 %d", len(stored["ids"]), len(filtered_ids))
+            log.info("文件过滤: 候选 %d, 匹配 %d, 允许的文件名=%s", metadata_limit, len(filtered_ids), allowed_stems)
 
     # Rerank
     candidate_ids = sorted_ids[:20]
