@@ -1,6 +1,7 @@
 """Hybrid retrieval: parallel vector + BM25 recall, RRF fusion, optional reranking."""
 
 import json
+import os
 import urllib.request
 
 import jieba
@@ -99,12 +100,14 @@ def _rerank(query: str, documents: list[str], top_n: int) -> list[dict]:
         return []
 
 
-def retrieve(index, question: str, top_k: int = 5) -> list[dict]:
+def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None = None) -> list[dict]:
     """并行混合检索 + RRF 融合 + Rerank。
 
     1. 向量、BM25 各独立召回 40 条（并行）
     2. RRF 融合两路结果
     3. Reranker 精排输出 top_k
+
+    file_paths: 若提供，仅返回这些文件路径下的结果（匹配 ChromaDB file_name 元数据）。
     """
     log.info("检索开始: question=%s, top_k=%d", question[:50], top_k)
 
@@ -130,6 +133,14 @@ def retrieve(index, question: str, top_k: int = 5) -> list[dict]:
     for nid, doc, meta in zip(stored["ids"], stored["documents"], stored["metadatas"]):
         id_to_text[nid] = doc
         id_to_source[nid] = meta.get("file_name", "unknown") if meta else "unknown"
+
+    # 按文件路径过滤
+    if file_paths:
+        allowed_names = {os.path.basename(p) for p in file_paths}
+        filtered_ids = [nid for nid in sorted_ids if id_to_source.get(nid, "") in allowed_names or id_to_source.get(nid, "unknown") == "unknown"]
+        if filtered_ids:
+            sorted_ids = filtered_ids
+            log.info("文件过滤: 输入 %d, 过滤后 %d", len(stored["ids"]), len(filtered_ids))
 
     # Rerank
     candidate_ids = sorted_ids[:20]

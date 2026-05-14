@@ -99,8 +99,9 @@ def rag_query_tool(args):
 
     question = args["question"]
     top_k = args.get("top_k", 5)
-    log.info("RAG 查询: question=%s, top_k=%d", question[:50], top_k)
-    return rag_module.query_formatted(question, top_k)
+    file_paths = args.get("file_paths")
+    log.info("RAG 查询: question=%s, top_k=%d, file_paths=%s", question[:50], top_k, len(file_paths) if file_paths else "全部")
+    return rag_module.query_formatted(question, top_k, file_paths=file_paths)
 
 
 def rag_ingest_tool(args):

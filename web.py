@@ -73,13 +73,34 @@ async def list_models():
     ]
 
 
-# 知识库列表（从文档表聚合）
+# 知识库列表（从文档表聚合分类 + 文档明细）
 @app.get("/api/knowledge-bases")
 async def list_knowledge_bases():
+    import json as _json
     docs = await db.list_documents(status="ready")
-    return [
-        {"id": "default", "name": "默认知识库", "docs": len(docs), "updated": docs[0]["updated_at"][:10] if docs else ""},
+    tag_map: dict[str, list[dict]] = {}
+    tag_label = {"report": "研究报告", "news": "金融新闻", "analysis": "分析报告"}
+    for d in docs:
+        tags = d.get("tags", "[]")
+        if isinstance(tags, str):
+            tags = _json.loads(tags)
+        for t in tags:
+            tag_map.setdefault(t, []).append(d)
+    categories = []
+    for tag, items in tag_map.items():
+        categories.append({
+            "id": tag, "name": tag_label.get(tag, tag),
+            "docs": len(items),
+            "updated": items[0]["updated_at"][:10] if items else "",
+            "doc_ids": [i["id"] for i in items],
+        })
+    doc_list = [
+        {"id": d["id"], "title": d["title"],
+         "tags": _json.loads(d["tags"]) if isinstance(d.get("tags"), str) else (d.get("tags") or []),
+         "file_type": d["file_type"]}
+        for d in docs
     ]
+    return {"categories": categories, "documents": doc_list}
 
 
 # 前端静态文件（放在最后，避免覆盖 API 路由）

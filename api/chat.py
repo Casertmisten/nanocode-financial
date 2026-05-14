@@ -40,6 +40,7 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
     model: str | None = None
+    doc_ids: list[int] | None = None
 
 
 def _sse(event: str, data: dict) -> str:
@@ -71,6 +72,7 @@ def _messages_to_llm_format(messages: list[dict]) -> list[dict]:
 async def _agentic_loop(
     messages: list[dict],
     model: str | None,
+    doc_filepaths: list[str] | None = None,
 ) -> AsyncIterator[str]:
     """异步 agentic loop，yield SSE 事件字符串。"""
     tools_schema = tools.make_schema()
@@ -133,6 +135,10 @@ async def _agentic_loop(
 
             log.info("工具调用 [%d/%d]: %s(%s)", idx + 1, len(tool_calls_map), tool_name, json.dumps(tool_args, ensure_ascii=False)[:200])
 
+            # 为 rag_query 注入文件路径过滤
+            if tool_name == "rag_query" and doc_filepaths:
+                tool_args["file_paths"] = doc_filepaths
+
             yield _sse("tool_start", {"tool": tool_name, "args": tool_args})
 
             tool_result = tools.run_tool(tool_name, tool_args)
@@ -172,10 +178,22 @@ async def chat(req: ChatRequest):
     llm_messages = _messages_to_llm_format(messages_raw)
     log.info("加载历史消息 %d 条，转换为 %d 条 LLM 格式", len(messages_raw), len(llm_messages))
 
+    # 解析选中的文档为文件路径
+    doc_filepaths: list[str] | None = None
+    if req.doc_ids:
+        doc_filepaths = []
+        for did in req.doc_ids:
+            doc = await db.get_document(did)
+            if doc and doc.get("filepath"):
+                doc_filepaths.append(doc["filepath"])
+        log.info("文档过滤: %d 个文档, %d 个文件路径", len(req.doc_ids), len(doc_filepaths))
+        if not doc_filepaths:
+            doc_filepaths = None
+
     async def stream():
         full_content: list[str] = []
 
-        async for sse_str in _agentic_loop(llm_messages, req.model):
+        async for sse_str in _agentic_loop(llm_messages, req.model, doc_filepaths):
             # 解析事件类型
             lines = sse_str.strip().split("\n")
             event_type = lines[0].replace("event: ", "")
