@@ -9,6 +9,12 @@ from fastapi.responses import StreamingResponse
 
 import config
 import db
+from prompts.financial_report_analysis import (
+    analyze_prompt,
+    analyze_system_prompt,
+    reduce_prompt,
+    reduce_system_prompt,
+)
 from utils import BaseLogger
 
 log = BaseLogger.getLogger("fra")
@@ -19,7 +25,12 @@ router = APIRouter(prefix="/api/fra", tags=["fra"])
 async def _run_fra_stream(query: str, session_id: str | None = None):
     """执行 FRA 流程，逐阶段 SSE 推送。"""
     from financial_report_analysis.template import DIMENSIONS
-    from financial_report_analysis.prompts import ANALYZE_PROMPT, REDUCE_PROMPT
+    from prompts.financial_report_analysis import (
+        analyze_prompt,
+        analyze_system_prompt,
+        reduce_prompt,
+        reduce_system_prompt,
+    )
     import rag
     import llm
 
@@ -66,8 +77,8 @@ async def _run_fra_stream(query: str, session_id: str | None = None):
             summaries[dd["name"]] = f"【{dd['name']}】该维度缺乏足够数据。"
         else:
             chunks_text = "\n\n---\n\n".join(dd["chunks"])
-            prompt = ANALYZE_PROMPT.format(dimension_name=dd["name"], chunks=chunks_text)
-            summaries[dd["name"]] = llm.call_llm("你是一个专业的金融分析师。", prompt)
+            prompt = analyze_prompt.format(dimension_name=dd["name"], chunks=chunks_text)
+            summaries[dd["name"]] = llm.call_llm(analyze_system_prompt, prompt)
             log.info("维度 [%s] 分析完成, 结果长度=%d", dd["name"], len(summaries[dd["name"]]))
 
     # 汇总来源
@@ -82,8 +93,8 @@ async def _run_fra_stream(query: str, session_id: str | None = None):
     for dim in DIMENSIONS:
         summaries_text += f"\n## {dim['name']}\n{summaries[dim['name']]}\n"
     sources_text = "\n".join(f"· {s}" for s in sorted(all_sources))
-    prompt = REDUCE_PROMPT.format(query=query, summaries=summaries_text, sources=sources_text)
-    report = llm.call_llm("你是一个资深金融分析师。", prompt)
+    prompt = reduce_prompt.format(query=query, summaries=summaries_text, sources=sources_text)
+    report = llm.call_llm(reduce_system_prompt, prompt)
     log.info("报告生成完成, 长度=%d", len(report))
 
     # 保存报告

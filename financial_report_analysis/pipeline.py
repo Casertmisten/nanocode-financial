@@ -3,7 +3,12 @@
 import logging
 import config
 import rag
-from financial_report_analysis.prompts import ANALYZE_PROMPT, REDUCE_PROMPT
+from prompts.financial_report_analysis import (
+    analyze_prompt,
+    analyze_system_prompt,
+    reduce_prompt,
+    reduce_system_prompt,
+)
 from financial_report_analysis.template import DIMENSIONS
 
 log = logging.getLogger(__name__)
@@ -68,8 +73,8 @@ def _analyze_dimension(name: str, chunks: list[str]) -> str:
         return f"【{name}】该维度缺乏足够数据，无法进行分析。"
 
     chunks_text = "\n\n---\n\n".join(chunks)
-    prompt = ANALYZE_PROMPT.format(dimension_name=name, chunks=chunks_text)
-    return _call_llm("你是一个专业的金融分析师。", prompt)
+    prompt = analyze_prompt.format(dimension_name=name, chunks=chunks_text)
+    return _call_llm(analyze_system_prompt, prompt)
 
 
 def _reduce(query: str, summaries: dict[str, str], sources: set[str]) -> str:
@@ -79,10 +84,10 @@ def _reduce(query: str, summaries: dict[str, str], sources: set[str]) -> str:
         summaries_text += f"\n## {dim['name']}\n{summaries[dim['name']]}\n"
 
     sources_text = "\n".join(f"· {s}" for s in sorted(sources))
-    prompt = REDUCE_PROMPT.format(
+    prompt = reduce_prompt.format(
         query=query, summaries=summaries_text, sources=sources_text
     )
-    return _call_llm("你是一个资深金融分析师。", prompt)
+    return _call_llm(reduce_system_prompt, prompt)
 
 
 def run(query: str) -> str:

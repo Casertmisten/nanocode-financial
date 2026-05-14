@@ -7,6 +7,7 @@ import httpx
 
 import config
 from utils import BaseLogger
+from prompts.main_prompts import rewrite_queries_prompt
 
 log = BaseLogger.getLogger("llm")
 
@@ -83,6 +84,28 @@ async def async_stream_chat(
                     yield json.loads(payload)
                 except json.JSONDecodeError:
                     log.warning("SSE JSON 解析失败: %s", payload[:200])
+
+
+def rewrite_queries(question: str, n: int = 3, model: str | None = None) -> list[str]:
+    """用 LLM 将用户问题改写为 n 个语义相近的检索变体。"""
+    system = rewrite_queries_prompt
+    user = f"原问题：{question}\n\n请生成 {n} 个改写查询："
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    body = _build_body(messages, "", model=model, stream=False)
+    body["max_tokens"] = 512
+    log.info("查询改写: question=%s", question[:50])
+    resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=30.0, proxy=None)
+    resp.raise_for_status()
+    content = resp.json()["choices"][0]["message"]["content"]
+    variants = [line.strip() for line in content.strip().split("\n") if line.strip()]
+    # 去掉可能的编号前缀（如 "1. "）
+    import re
+    cleaned = [re.sub(r"^\d+[\.\)、]\s*", "", v) for v in variants]
+    log.info("查询改写完成: 生成 %d 个变体", len(cleaned))
+    return cleaned[:n]
 
 
 def call_llm(

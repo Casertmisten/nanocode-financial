@@ -1,7 +1,6 @@
 """SSE 流式对话 API — 异步 agentic loop + 工具调用。"""
 
 import json
-import os
 from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
@@ -12,6 +11,7 @@ import config
 import db
 import llm
 import tools
+from prompts.main_prompts import system_prompt as _SYSTEM_PROMPT_TEMPLATE
 from utils import BaseLogger
 
 log = BaseLogger.getLogger("chat")
@@ -19,20 +19,7 @@ log = BaseLogger.getLogger("chat")
 router = APIRouter(prefix="/api", tags=["chat"])
 
 
-_DEFAULT_SYSTEM_PROMPT = "你是一个金融分析助手"
-
-
-def _load_system_prompt() -> str:
-    """加载系统提示词，优先使用 prompts/rag_system.txt，支持 {cwd} 占位符。"""
-    prompt_path = os.path.join(config.BASE_DIR, "prompts", "rag_system.txt")
-    if os.path.isfile(prompt_path):
-        with open(prompt_path, encoding="utf-8") as f:
-            text = f.read()
-        return text.replace("{cwd}", config.BASE_DIR)
-    return _DEFAULT_SYSTEM_PROMPT
-
-
-SYSTEM_PROMPT = _load_system_prompt()
+SYSTEM_PROMPT = _SYSTEM_PROMPT_TEMPLATE.replace("{cwd}", config.BASE_DIR)
 log.info("系统提示词加载完成，长度: %d", len(SYSTEM_PROMPT))
 
 

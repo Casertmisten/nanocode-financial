@@ -1,4 +1,4 @@
-"""Chroma vector index management with LlamaIndex."""
+"""使用LlamaIndex进行Chroma向量索引管理。"""
 
 import hashlib
 import json
@@ -14,19 +14,19 @@ from utils import BaseLogger
 
 log = BaseLogger.getLogger("rag.indexer")
 
-# Track which custom model names have been registered with LlamaIndex enums.
+# 跟踪哪些自定义模型名称已经注册到LlamaIndex枚举中。
 _registered_models: set = set()
 
 
 def _register_custom_model(model_name: str):
-    """Register a non-standard model name with LlamaIndex's embedding enums.
+    """将非标准模型名称注册到LlamaIndex的嵌入枚举中。
 
-    LlamaIndex's OpenAIEmbedding validates model names against a fixed enum
-    that only contains OpenAI models.  DashScope (Ali) uses different model
-    names (e.g. ``text-embedding-v3``).  This function monkey-patches the enum
-    and lookup dicts so that custom model names are accepted.
+    LlamaIndex的OpenAIEmbedding会根据固定的枚举验证模型名称，
+    该枚举只包含OpenAI模型。DashScope（阿里）使用不同的模型名称
+    （例如 ``text-embedding-v3``）。此函数通过猴子补丁修改枚举
+    和查找字典，使自定义模型名称被接受。
 
-    Safe to call multiple times -- each model name is registered only once.
+    可以安全地多次调用——每个模型名称只会注册一次。
     """
     if model_name in _registered_models:
         return
@@ -72,7 +72,7 @@ def _register_custom_model(model_name: str):
 
 
 def _get_embed_model(api_url: str, api_key: str, model_name: str):
-    """Create OpenAI-compatible embedding model."""
+    """创建OpenAI兼容的嵌入模型。"""
     _register_custom_model(model_name)
     return OpenAIEmbedding(
         model=model_name,
@@ -82,12 +82,12 @@ def _get_embed_model(api_url: str, api_key: str, model_name: str):
 
 
 def _ingested_tracker_path(chroma_dir: str) -> str:
-    """Path to the JSON file tracking which files have been ingested."""
+    """跟踪已摄入文件的JSON文件路径。"""
     return os.path.join(os.path.dirname(chroma_dir), ".ingested.json")
 
 
 def _load_ingested(tracker_path: str) -> dict:
-    """Load the ingested files tracker. Returns {filepath: md5hash}."""
+    """加载已摄入文件跟踪器。返回 {文件路径: md5哈希}。"""
     if not os.path.exists(tracker_path):
         return {}
     with open(tracker_path, "r") as f:
@@ -95,14 +95,14 @@ def _load_ingested(tracker_path: str) -> dict:
 
 
 def _save_ingested(tracker_path: str, data: dict):
-    """Save the ingested files tracker."""
+    """保存已摄入文件跟踪器。"""
     os.makedirs(os.path.dirname(tracker_path), exist_ok=True)
     with open(tracker_path, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def _file_md5(file_path: str) -> str:
-    """Compute MD5 hash of a file."""
+    """计算文件的MD5哈希值。"""
     h = hashlib.md5()
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
@@ -116,9 +116,9 @@ def get_index(
     embedding_api_key: str,
     embedding_model_name: str,
 ):
-    """Get or create a VectorStoreIndex backed by Chroma.
+    """获取或创建由Chroma支持的VectorStoreIndex。
 
-    Returns (index, embed_model) tuple.
+    返回 (index, embed_model) 元组。
     """
     embed_model = _get_embed_model(embedding_api_url, embedding_api_key, embedding_model_name)
 
@@ -139,10 +139,9 @@ def add_to_index(
     chunk_size: int = 1024,
     chunk_overlap: int = 100,
 ) -> int:
-    """Add new/modified documents to the index. Returns count of docs added.
+    """将新文档/修改后的文档添加到索引中。返回添加的文档数量。
 
-    Uses an ingested tracker (.ingested.json) to skip files already processed
-    with the same content hash.
+    使用摄入跟踪器（.ingested.json）跳过已处理且内容哈希相同的文件。
     """
     tracker_path = _ingested_tracker_path(chroma_dir)
     ingested = _load_ingested(tracker_path)
@@ -182,9 +181,9 @@ def build_fresh_index(
     chunk_size: int = 1024,
     chunk_overlap: int = 100,
 ):
-    """Build a fresh index from documents. Used when no index exists yet.
+    """从文档构建新索引。当索引不存在时使用。
 
-    Returns (index, embed_model, doc_count) tuple.
+    返回 (index, embed_model, doc_count) 元组。
     """
     log.info("开始构建全新索引: %d 个文档", len(documents))
     embed_model = _get_embed_model(embedding_api_url, embedding_api_key, embedding_model_name)
