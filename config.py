@@ -9,7 +9,7 @@ dotenv.load_dotenv()
 # --- LLM API ---
 API_URL = os.environ.get("ALI_API_URL", "")
 API_KEY = os.environ.get("ALI_API_KEY", "")
-MODEL = os.environ.get("ALI_MODEL", "qwen3.5-flash")
+MODEL = os.environ.get("ALI_MODEL", "deepseek-v4-flash")
 
 # --- Embedding API ---
 EMBEDDING_API_URL = os.environ.get(
