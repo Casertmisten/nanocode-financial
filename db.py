@@ -96,6 +96,15 @@ async def init_db():
                 market TEXT DEFAULT '',
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS research_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+                query TEXT NOT NULL,
+                content TEXT NOT NULL,
+                filepath TEXT,
+                created_at TEXT NOT NULL
+            );
         """)
         await db.commit()
         log.info("数据库初始化完成: %s", DB_PATH)
@@ -467,3 +476,49 @@ def get_cached_stock_list(keyword: str = "", limit: int = 50) -> list[dict]:
         return [dict(r) for r in cursor.fetchall()]
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Research Reports CRUD
+# ---------------------------------------------------------------------------
+
+async def add_research_report(query: str, content: str, filepath: str,
+                               session_id: str | None = None) -> int:
+    """添加研究报告，返回报告 ID"""
+    now = _now()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO research_reports (session_id, query, content, filepath, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, query, content, filepath, now),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def list_research_reports(limit: int = 20) -> list[dict]:
+    """获取研究报告列表"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, session_id, query, filepath, created_at FROM research_reports "
+            "ORDER BY created_at DESC LIMIT ?", (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def get_research_report(report_id: int) -> dict | None:
+    """获取单个研究报告"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM research_reports WHERE id = ?", (report_id,))
+        row = await cursor.fetchone()
+        return _row_to_dict(row) if row else None
+    finally:
+        await db.close()
