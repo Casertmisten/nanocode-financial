@@ -11,6 +11,8 @@ import deep_research
 from deep_research.schemas import SubTask
 from utils import BaseLogger
 
+import config as _config
+
 log = BaseLogger.getLogger("research")
 
 router = APIRouter(prefix="/api/research", tags=["research"])
@@ -40,10 +42,24 @@ async def run_plan(req: PlanRequest):
     log.info("收到 Plan 请求: query=%s", req.query[:80])
 
     try:
-        outline, sub_tasks = deep_research.plan(req.query)
+        plan_usage: dict = {}
+        outline, sub_tasks = deep_research.plan(req.query, usage_out=plan_usage)
     except Exception as e:
         log.error("Plan 失败: %s", e, exc_info=True)
         raise HTTPException(500, f"规划失败: {e}")
+
+    # 记录 plan 阶段 token 用量
+    if plan_usage.get("total_tokens"):
+        try:
+            await db.add_token_usage(
+                model=_config.MODEL,
+                prompt_tokens=plan_usage.get("prompt_tokens", 0),
+                completion_tokens=plan_usage.get("completion_tokens", 0),
+                total_tokens=plan_usage.get("total_tokens", 0),
+                source="research",
+            )
+        except Exception as e:
+            log.warning("记录 Plan token 用量失败: %s", e)
 
     return {
         "research_outline": outline,
@@ -86,6 +102,21 @@ async def run_execute(req: ExecuteRequest):
 
         # 执行 pipeline
         results, report, report_id, filepath = await deep_research.execute(req.query, sub_tasks)
+
+        # 记录各 executor 的 token 用量
+        for r in results:
+            if r.usage.get("total_tokens"):
+                try:
+                    await db.add_token_usage(
+                        model=_config.MODEL,
+                        prompt_tokens=r.usage.get("prompt_tokens", 0),
+                        completion_tokens=r.usage.get("completion_tokens", 0),
+                        total_tokens=r.usage.get("total_tokens", 0),
+                        source="research",
+                        session_id=req.session_id,
+                    )
+                except Exception as e:
+                    log.warning("记录 Executor token 用量失败: %s", e)
 
         # 推送各 executor 完成事件
         for r in results:

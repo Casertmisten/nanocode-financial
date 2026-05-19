@@ -43,6 +43,7 @@ def stream_chat(
     system_prompt: str,
     tools: list[dict] | None = None,
     model: str | None = None,
+    usage_out: dict | None = None,
 ) -> Iterator[dict]:
     """同步流式迭代器，用于 CLI。"""
     body = _build_body(messages, system_prompt, tools, model, stream=True)
@@ -57,7 +58,11 @@ def stream_chat(
                 if payload.strip() == "[DONE]":
                     break
                 try:
-                    yield json.loads(payload)
+                    chunk = json.loads(payload)
+                    # 流式响应的最后一个 chunk 通常携带 usage
+                    if usage_out is not None and chunk.get("usage"):
+                        usage_out.update(chunk["usage"])
+                    yield chunk
                 except json.JSONDecodeError:
                     log.warning("SSE JSON 解析失败: %s", payload[:200])
 
@@ -67,6 +72,7 @@ async def async_stream_chat(
     system_prompt: str,
     tools: list[dict] | None = None,
     model: str | None = None,
+    usage_out: dict | None = None,
 ) -> AsyncIterator[dict]:
     """异步流式迭代器，用于 Web SSE。"""
     body = _build_body(messages, system_prompt, tools, model, stream=True)
@@ -81,12 +87,20 @@ async def async_stream_chat(
                 if payload.strip() == "[DONE]":
                     break
                 try:
-                    yield json.loads(payload)
+                    chunk = json.loads(payload)
+                    if usage_out is not None and chunk.get("usage"):
+                        usage_out.update(chunk["usage"])
+                    yield chunk
                 except json.JSONDecodeError:
                     log.warning("SSE JSON 解析失败: %s", payload[:200])
 
 
-def rewrite_queries(question: str, n: int = 3, model: str | None = None) -> list[str]:
+def rewrite_queries(
+    question: str,
+    n: int = 3,
+    model: str | None = None,
+    usage_out: dict | None = None,
+) -> list[str]:
     """用 LLM 将用户问题改写为 n 个语义相近的检索变体。"""
     system = rewrite_queries_prompt
     user = f"原问题：{question}\n\n请生成 {n} 个改写查询："
@@ -100,9 +114,11 @@ def rewrite_queries(question: str, n: int = 3, model: str | None = None) -> list
     log.info("查询改写: question=%s", question[:50])
     resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=30.0, proxy=None)
     resp.raise_for_status()
-    content = resp.json()["choices"][0]["message"]["content"]
+    data = resp.json()
+    if usage_out is not None and "usage" in data:
+        usage_out.update(data["usage"])
+    content = data["choices"][0]["message"]["content"]
     variants = [line.strip() for line in content.strip().split("\n") if line.strip()]
-    # 去掉可能的编号前缀（如 "1. "）
     import re
     cleaned = [re.sub(r"^\d+[\.\)、]\s*", "", v) for v in variants]
     log.info("查询改写完成: 生成 %d 个变体", len(cleaned))
@@ -114,6 +130,7 @@ def call_llm(
     system_prompt: str,
     user_content: str,
     model: str | None = None,
+    usage_out: dict | None = None,
 ) -> str:
     """同步非流式调用，用于 FRA pipeline 等场景。返回 response text content。"""
     messages = [
@@ -125,6 +142,8 @@ def call_llm(
     resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=_TIMEOUT, proxy=None)
     resp.raise_for_status()
     data = resp.json()
+    if usage_out is not None and "usage" in data:
+        usage_out.update(data["usage"])
     content = data["choices"][0]["message"]["content"]
     log.info("同步调用完成: 响应长度=%d", len(content))
     return content
