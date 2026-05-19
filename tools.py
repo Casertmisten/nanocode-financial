@@ -348,7 +348,7 @@ def run_tool(name, args):
 
 
 def make_schema():
-    """Convert TOOLS registry into OpenAI function calling format."""
+    """生成 OpenAI调用格式的工具注册。"""
     result = []
     for name, (description, params, _fn) in TOOLS.items():
         properties = {}

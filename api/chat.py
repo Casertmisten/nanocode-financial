@@ -61,21 +61,29 @@ async def _agentic_loop(
     model: str | None,
     doc_filepaths: list[str] | None = None,
     session_id: str | None = None,
+    system_prompt: str | None = None,
 ) -> AsyncIterator[str]:
     """异步 agentic loop，yield SSE 事件字符串。"""
     tools_schema = tools.make_schema()
     llm_messages = list(messages)
-    max_turns = 20
+    max_turns = 20 # 最大轮数，防止死循环
+    _sys = system_prompt or SYSTEM_PROMPT
 
     for turn in range(max_turns):
-        content_parts: list[str] = []
+        content_parts: list[str] = [] # 本轮对话内容
         tool_calls_map: dict[int, dict] = {}  # index -> {id, name, arguments}
         usage_turn: dict = {}
 
         async for chunk in llm.async_stream_chat(
-            llm_messages, SYSTEM_PROMPT, tools=tools_schema, model=model,
+            llm_messages, _sys, tools=tools_schema, model=model,
             usage_out=usage_turn,
-        ):
+        ):  
+            # 流式推送返回
+            # {
+            #   "choices": [{
+            #     "delta": {"content": "Python"}
+            #   }]
+            # }
             choices = chunk.get("choices", [])
             if not choices:
                 continue
@@ -210,7 +218,22 @@ async def chat(req: ChatRequest):
     async def stream():
         full_content: list[str] = []
 
-        async for sse_str in _agentic_loop(llm_messages, req.model, doc_filepaths, req.session_id):
+        # 注入知识库文档列表到系统提示词
+        turn_system_prompt = SYSTEM_PROMPT
+        try:
+            docs = await db.list_documents(status="ready")
+            if docs:
+                doc_lines = "\n".join(f"- {d['title']} ({d['file_type']})" for d in docs)
+            else:
+                doc_lines = "（知识库为空，暂无文档）"
+            turn_system_prompt = SYSTEM_PROMPT.replace("{documents}", doc_lines)
+        except Exception:
+            turn_system_prompt = SYSTEM_PROMPT.replace("{documents}", "（知识库为空，暂无文档）")
+
+        async for sse_str in _agentic_loop(
+            llm_messages, req.model, doc_filepaths, req.session_id,
+            system_prompt=turn_system_prompt,
+        ):
             # 解析事件类型
             lines = sse_str.strip().split("\n")
             event_type = lines[0].replace("event: ", "")

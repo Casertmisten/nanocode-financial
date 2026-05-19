@@ -313,6 +313,19 @@ async def get_document(doc_id: int) -> dict | None:
         await db.close()
 
 
+def get_document_titles() -> list[dict]:
+    """同步获取所有 ready 状态的文档标题（供 CLI 和预注入使用）。"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.execute(
+            "SELECT id, title, file_type FROM documents WHERE status = 'ready' ORDER BY title"
+        )
+        return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
 async def update_document(doc_id: int, **fields) -> bool:
     """更新文档字段，自动更新 updated_at"""
     if not fields:

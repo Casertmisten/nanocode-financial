@@ -75,8 +75,10 @@ async def async_stream_chat(
     usage_out: dict | None = None,
 ) -> AsyncIterator[dict]:
     """异步流式迭代器，用于 Web SSE。"""
+    # 构造请求体
     body = _build_body(messages, system_prompt, tools, model, stream=True)
     log.info("异步流式调用: model=%s, 消息数=%d", body["model"], len(messages))
+    log.info("请求体: %s", body)
     async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=None) as client:
         async with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
             resp.raise_for_status()
