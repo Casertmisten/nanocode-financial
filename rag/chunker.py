@@ -22,12 +22,23 @@ def split_documents(
     Markdown → MarkdownNodeParser（按标题层级切分）
               → SemanticSplitterNodeParser（同层级内语义分块，需 embed_model）
               → SentenceSplitter 回退（无 embed_model 或单节点超长时）
-    其他文件 → SentenceSplitter（按句子切分）
+    其他文件 → SentenceSplitter（按指定配置分块）
     """
     md_parser = MarkdownNodeParser()
-    sentence_splitter = SentenceSplitter(
+    
+    # Markdown 用的分块器（默认配置）
+    md_sentence_splitter = SentenceSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+    )
+    
+    # 非 Markdown 用的分块器（专用配置）
+    other_sentence_splitter = SentenceSplitter(
+        chunk_size=512,        # token数，不是字符数
+        chunk_overlap=128,     # 重叠部分，保留跨块上下文
+        separator=" ",         # 分隔符
+        paragraph_separator="\n\n\n",  # 段落边界优先
+        secondary_chunking_regex="[^,.;]+[,.;]?",  # 子句级回退
     )
 
     md_docs = [d for d in documents if _is_markdown(d)]
@@ -49,18 +60,18 @@ def split_documents(
             md_nodes = semantic_parser.build_semantic_nodes_from_nodes(md_nodes)
         elif _needs_sub_split(md_nodes):
             # 无嵌入模型时回退到句子切分
-            md_nodes = sentence_splitter(md_nodes)
+            md_nodes = md_sentence_splitter(md_nodes)
 
         # 语义分块后仍可能有超长节点，兜底拆分
         if _needs_sub_split(md_nodes):
-            md_nodes = sentence_splitter(md_nodes)
+            md_nodes = md_sentence_splitter(md_nodes)
 
         nodes.extend(md_nodes)
 
-    # 非 Markdown: 原有策略
+    # 非 Markdown: 使用专用配置
     if other_docs:
         nodes.extend(
-            sentence_splitter.get_nodes_from_documents(other_docs)
+            other_sentence_splitter.get_nodes_from_documents(other_docs)
         )
 
     return nodes
