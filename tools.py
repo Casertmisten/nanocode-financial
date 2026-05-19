@@ -198,21 +198,38 @@ def stock_news_tool(args):
 
 
 def web_search_tool(args):
-    """使用 DuckDuckGo 搜索互联网信息。"""
-    from duckduckgo_search import DDGS
+    """使用 Tavily 搜索互联网信息。"""
+    from tavily import TavilyClient
+    from dotenv import dotenv_values
+    import db
 
     query = args["query"]
     max_results = args.get("max_results", 5)
     log.info("Web 搜索: query=%s, max_results=%d", query[:50], max_results)
 
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
+        api_key = dotenv_values()["TAVILY_API_KEY"]
+        client = TavilyClient(api_key)
+        response = client.search(query=query, max_results=max_results, search_depth="advanced")
+
+        answer = response.get("answer", "")
+        results = response.get("results", [])
         if not results:
             return "未找到相关搜索结果。"
+
+        # 保存到数据库
+        try:
+            db.save_web_search(query, answer or "", results)
+            log.info("Web 搜索结果已保存到数据库: query=%s", query[:50])
+        except Exception:
+            log.warning("保存搜索结果失败", exc_info=True)
+
+        # 格式化输出
         parts = []
+        if answer:
+            parts.append(f"【摘要】{answer}\n")
         for i, r in enumerate(results, 1):
-            parts.append(f"{i}. {r.get('title', '')}\n   {r.get('body', '')}\n   链接: {r.get('href', '')}")
+            parts.append(f"{i}. {r.get('title', '')}\n   {r.get('content', '')}\n   链接: {r.get('url', '')}")
         return "\n\n".join(parts)
     except Exception as e:
         log.error("Web 搜索失败: %s", e, exc_info=True)
