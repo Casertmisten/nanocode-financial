@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>金融智能分析助手 - 深度研究</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+  <style>
+    /* --- 深度研究页面样式 --- */
+    .research-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* === Phase 1: 输入 === */
+    .phase-input {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      padding: var(--stack-lg);
+      text-align: center;
+      gap: var(--stack-lg);
+    }
+
+    .research-icon {
+      width: 72px;
+      height: 72px;
+      border-radius: var(--radius-xl);
+      background: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 8px 32px rgba(0, 35, 111, 0.2);
+    }
+
+    .research-title {
+      font: var(--font-headline-lg);
+      font-size: 28px;
+      color: var(--color-on-surface);
+    }
+
+    .research-desc {
+      font: var(--font-body-md);
+      color: var(--color-on-surface-variant);
+      max-width: 520px;
+      line-height: 1.7;
+    }
+
+    .research-input-box {
+      max-width: 640px;
+      width: 100%;
+      display: flex;
+      align-items: flex-end;
+      gap: var(--stack-sm);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-outline-variant);
+      border-radius: var(--radius-md);
+      padding: var(--stack-sm) var(--stack-sm) var(--stack-sm) var(--stack-md);
+      transition: all var(--transition-fast);
+    }
+
+    .research-input-box:focus-within {
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 2px rgba(0, 35, 111, 0.1);
+    }
+
+    .research-input-box textarea {
+      flex: 1;
+      resize: none;
+      min-height: 24px;
+      max-height: 120px;
+      padding: 6px 0;
+      font: var(--font-body-md);
+      line-height: 1.5;
+    }
+
+    .research-input-box textarea::placeholder {
+      color: var(--color-outline);
+    }
+
+    .btn-start {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all var(--transition-fast);
+    }
+
+    .btn-start:hover { background: var(--color-primary-container); }
+    .btn-start:disabled {
+      background: var(--color-surface-container);
+      color: var(--color-outline);
+      cursor: default;
+    }
+
+    /* === Phase 2: 子任务编辑 === */
+    .phase-plan {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--stack-lg) calc(var(--stack-lg) * 2);
+    }
+
+    .phase-plan::-webkit-scrollbar { width: 6px; }
+    .phase-plan::-webkit-scrollbar-thumb {
+      background: var(--color-outline-variant);
+      border-radius: 3px;
+    }
+
+    .plan-header {
+      max-width: 760px;
+      margin: 0 auto var(--stack-lg);
+    }
+
+    .plan-outline {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--stack-md);
+      margin-bottom: var(--stack-lg);
+      border-left: 3px solid var(--color-primary);
+    }
+
+    .plan-outline-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: var(--stack-sm);
+    }
+
+    .plan-outline-text {
+      font: var(--font-body-md);
+      color: var(--color-on-surface);
+      line-height: 1.6;
+    }
+
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--stack-md);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .task-card {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--stack-md);
+      transition: all var(--transition-fast);
+      position: relative;
+    }
+
+    .task-card:hover {
+      border-color: var(--color-primary);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .task-card-header {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      margin-bottom: var(--stack-sm);
+    }
+
+    .task-id-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-full);
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+      font-size: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .task-card input.task-title-input {
+      flex: 1;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-on-surface);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      transition: border var(--transition-fast);
+    }
+
+    .task-card input.task-title-input:focus {
+      border-color: var(--color-primary);
+      background: var(--color-surface-container-low);
+    }
+
+    .task-card textarea.task-desc-input {
+      width: 100%;
+      font-size: 14px;
+      color: var(--color-on-surface-variant);
+      line-height: 1.5;
+      padding: 4px 6px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      resize: vertical;
+      min-height: 40px;
+      max-height: 100px;
+      transition: border var(--transition-fast);
+    }
+
+    .task-card textarea.task-desc-input:focus {
+      border-color: var(--color-primary);
+      background: var(--color-surface-container-low);
+    }
+
+    .task-meta {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      margin-top: var(--stack-sm);
+      flex-wrap: wrap;
+    }
+
+    .task-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .task-tag-tool {
+      background: var(--color-primary-fixed);
+      color: var(--color-primary);
+    }
+
+    .task-tag-query {
+      background: rgba(16, 185, 129, 0.12);
+      color: #047857;
+    }
+
+    .btn-delete-task {
+      position: absolute;
+      top: var(--stack-sm);
+      right: var(--stack-sm);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-sm);
+      color: var(--color-outline);
+      opacity: 0;
+      transition: all var(--transition-fast);
+    }
+
+    .task-card:hover .btn-delete-task { opacity: 1; }
+    .btn-delete-task:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: var(--color-danger);
+    }
+
+    .plan-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--stack-md);
+      margin-top: var(--stack-lg);
+      max-width: 760px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .btn-add-task {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px var(--stack-md);
+      border-radius: var(--radius);
+      border: 1px dashed var(--color-outline-variant);
+      color: var(--color-on-surface-variant);
+      font-size: 14px;
+      transition: all var(--transition-fast);
+    }
+
+    .btn-add-task:hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+      background: var(--color-primary-fixed);
+    }
+
+    .btn-confirm-plan {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      padding: 10px var(--stack-lg);
+      border-radius: var(--radius);
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+      font-weight: 500;
+      font-size: 14px;
+      transition: all var(--transition-fast);
+    }
+
+    .btn-confirm-plan:hover { background: var(--color-primary-container); }
+
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px var(--stack-md);
+      border-radius: var(--radius);
+      color: var(--color-on-surface-variant);
+      font-size: 14px;
+      transition: all var(--transition-fast);
+    }
+
+    .btn-back:hover {
+      background: var(--color-surface-container);
+      color: var(--color-on-surface);
+    }
+
+    /* === Phase 3: 执行 + 报告 === */
+    .phase-execute {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--stack-lg) calc(var(--stack-lg) * 2);
+    }
+
+    .phase-execute::-webkit-scrollbar { width: 6px; }
+    .phase-execute::-webkit-scrollbar-thumb {
+      background: var(--color-outline-variant);
+      border-radius: 3px;
+    }
+
+    .progress-section {
+      max-width: 760px;
+      margin: 0 auto var(--stack-lg);
+    }
+
+    .progress-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-on-surface);
+      margin-bottom: var(--stack-md);
+    }
+
+    .executor-progress-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--stack-sm);
+    }
+
+    .executor-item {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      padding: 8px 12px;
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      font-size: 14px;
+    }
+
+    .executor-status-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .executor-status-icon.pending { color: var(--color-outline); }
+    .executor-status-icon.running { color: var(--color-primary); animation: spin 1s linear infinite; }
+    .executor-status-icon.done { color: var(--color-success); }
+    .executor-status-icon.error { color: var(--color-danger); }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .executor-name { flex: 1; color: var(--color-on-surface-variant); }
+    .executor-badge {
+      font-size: 11px;
+      padding: 1px 8px;
+      border-radius: var(--radius-full);
+      font-weight: 500;
+    }
+
+    .executor-badge.pending { background: var(--color-surface-container); color: var(--color-outline); }
+    .executor-badge.running { background: var(--color-primary-fixed); color: var(--color-primary); }
+    .executor-badge.done { background: rgba(16, 185, 129, 0.12); color: #047857; }
+    .executor-badge.error { background: rgba(239, 68, 68, 0.12); color: var(--color-danger); }
+
+    /* 报告 */
+    .report-section {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .report-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--stack-md);
+    }
+
+    .report-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--color-on-surface);
+    }
+
+    .report-content {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--stack-lg);
+      border-left: 3px solid var(--color-primary);
+    }
+
+    /* Markdown 渲染样式 */
+    .report-content h1, .report-content h2, .report-content h3 {
+      margin: 0.6em 0 0.3em;
+      font-weight: 600;
+    }
+    .report-content h1 { font-size: 1.3em; }
+    .report-content h2 { font-size: 1.15em; }
+    .report-content h3 { font-size: 1.05em; }
+    .report-content p { margin: 0.4em 0; line-height: 1.7; }
+    .report-content ul, .report-content ol { margin: 0.4em 0; padding-left: 1.5em; }
+    .report-content li { margin: 0.15em 0; }
+    .report-content blockquote {
+      margin: 0.5em 0; padding: 0.4em 1em;
+      border-left: 3px solid var(--color-primary);
+      background: var(--color-surface-container-low);
+      border-radius: 0 8px 8px 0;
+    }
+    .report-content code {
+      background: var(--color-surface-container-low); padding: 0.15em 0.4em;
+      border-radius: 4px; font-size: 0.9em;
+    }
+    .report-content pre {
+      margin: 0.5em 0; padding: 1em;
+      background: #1e1e2e; color: #cdd6f4;
+      border-radius: 8px; overflow-x: auto;
+    }
+    .report-content pre code {
+      background: none; padding: 0; font-size: 0.88em;
+      color: inherit;
+    }
+    .report-content table { border-collapse: collapse; margin: 0.5em 0; width: 100%; }
+    .report-content th, .report-content td {
+      border: 1px solid var(--color-border); padding: 0.4em 0.8em; text-align: left;
+    }
+    .report-content th { background: var(--color-surface-container-low); font-weight: 600; }
+    .report-content hr { border: none; border-top: 1px solid var(--color-border); margin: 0.8em 0; }
+    .report-content strong { font-weight: 600; }
+
+    .report-actions {
+      display: flex;
+      gap: var(--stack-sm);
+      margin-top: var(--stack-md);
+    }
+
+    .btn-report-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      color: var(--color-on-surface-variant);
+      transition: all var(--transition-fast);
+    }
+
+    .btn-report-action:hover {
+      background: var(--color-surface-container);
+      color: var(--color-on-surface);
+    }
+
+    /* 历史报告列表 */
+    .history-section {
+      max-width: 760px;
+      margin: var(--stack-lg) auto 0;
+    }
+
+    .history-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-on-surface);
+      margin-bottom: var(--stack-md);
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      padding: 10px var(--stack-md);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      margin-bottom: var(--stack-sm);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .history-item:hover {
+      border-color: var(--color-primary);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .history-item-text {
+      flex: 1;
+      font-size: 14px;
+      color: var(--color-on-surface);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .history-item-time {
+      font-size: 12px;
+      color: var(--color-outline);
+      flex-shrink: 0;
+    }
+
+    /* 移动端 */
+    .btn-hamburger { display: none; }
+
+    @media (max-width: 768px) {
+      .btn-hamburger { display: flex; }
+
+      .phase-plan, .phase-execute {
+        padding: var(--stack-md);
+      }
+    }
+
+    /* 加载动画 */
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--color-outline-variant);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .generating-hint {
+      display: flex;
+      align-items: center;
+      gap: var(--stack-sm);
+      padding: var(--stack-md);
+      color: var(--color-on-surface-variant);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <!-- 移动端遮罩 -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+  <div class="app-layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">FA</div>
+        <span class="sidebar-title">FinAssist</span>
+      </div>
+
+      <div class="sidebar-actions">
+        <button class="btn-new-chat" onclick="newResearch()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          新建研究
+        </button>
+      </div>
+
+      <div class="sidebar-section-title">历史研究</div>
+      <ul class="sidebar-list" id="historyList"></ul>
+
+      <!-- 底部导航 -->
+      <nav class="sidebar-nav">
+        <a href="chat.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          对话
+        </a>
+        <a href="research.html" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          深度研究
+        </a>
+        <a href="knowledge.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          知识库
+        </a>
+        <a href="settings.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <!-- 顶部栏 -->
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon btn-hamburger" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="top-bar-title" id="topBarTitle">深度研究</h1>
+        </div>
+      </div>
+
+      <!-- 研究区域 -->
+      <div class="research-area" id="researchArea">
+        <!-- Phase 1: 输入 -->
+        <div class="phase-input" id="phaseInput">
+          <div class="research-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          </div>
+          <h2 class="research-title">深度研究</h2>
+          <p class="research-desc">输入一个开放性金融问题，系统将自动拆解为子任务，并行搜集信息并生成结构化研究报告。</p>
+          <div class="research-input-box">
+            <textarea id="queryInput" rows="2" placeholder="输入研究问题，例如：分析新能源行业 2025 年投资前景..." onkeydown="handleQueryKey(event)" oninput="autoResize(this)"></textarea>
+            <button class="btn-start" id="btnStart" onclick="startResearch()" disabled>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Phase 2: Plan 结果 -->
+        <div class="phase-plan" id="phasePlan" style="display: none;">
+          <div class="plan-header">
+            <div class="plan-outline" id="planOutline">
+              <div class="plan-outline-title">研究框架</div>
+              <div class="plan-outline-text" id="outlineText"></div>
+            </div>
+          </div>
+          <div class="task-list" id="taskList"></div>
+          <div class="plan-actions">
+            <button class="btn-back" onclick="backToInput()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+              返回修改
+            </button>
+            <button class="btn-add-task" onclick="addTask()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              添加子任务
+            </button>
+            <button class="btn-confirm-plan" onclick="confirmTasks()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              确认并开始研究
+            </button>
+          </div>
+        </div>
+
+        <!-- Phase 3: 执行 + 报告 -->
+        <div class="phase-execute" id="phaseExecute" style="display: none;">
+          <div class="progress-section" id="progressSection">
+            <div class="progress-title">研究进度</div>
+            <div class="executor-progress-list" id="executorList"></div>
+            <div class="generating-hint" id="generatingHint" style="display: none;">
+              <span class="loading-spinner"></span>
+              <span>正在生成研究报告...</span>
+            </div>
+          </div>
+          <div class="report-section" id="reportSection" style="display: none;">
+            <div class="report-header">
+              <div class="report-title">研究报告</div>
+              <div class="report-actions">
+                <button class="btn-report-action" onclick="copyReport()">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  复制
+                </button>
+                <button class="btn-report-action" onclick="downloadReport()">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  下载
+                </button>
+                <button class="btn-report-action" onclick="newResearch()">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  新研究
+                </button>
+              </div>
+            </div>
+            <div class="report-content" id="reportContent"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    // --- 状态 ---
+    let currentQuery = '';
+    let subTasks = [];      // 当前编辑的子任务列表
+    let reportText = '';    // 最终报告内容
+    let isRunning = false;
+
+    // --- DOM ---
+    const queryInput = document.getElementById('queryInput');
+    const btnStart = document.getElementById('btnStart');
+    const phaseInput = document.getElementById('phaseInput');
+    const phasePlan = document.getElementById('phasePlan');
+    const phaseExecute = document.getElementById('phaseExecute');
+
+    // --- 输入处理 ---
+    queryInput.addEventListener('input', () => {
+      btnStart.disabled = queryInput.value.trim() === '';
+    });
+
+    function handleQueryKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (queryInput.value.trim()) startResearch();
+      }
+    }
+
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+
+    // --- Phase 1 -> Phase 2: Plan ---
+    async function startResearch() {
+      const query = queryInput.value.trim();
+      if (!query || isRunning) return;
+
+      isRunning = true;
+      btnStart.disabled = true;
+      currentQuery = query;
+      document.getElementById('topBarTitle').textContent = query.length > 30 ? query.slice(0, 30) + '...' : query;
+
+      try {
+        const data = await api('POST', '/research/plan', { query });
+        subTasks = data.sub_tasks || [];
+        document.getElementById('outlineText').textContent = data.research_outline || '';
+        renderTaskCards();
+        showPhase('plan');
+      } catch (e) {
+        alert('规划失败: ' + e.message);
+        btnStart.disabled = false;
+        isRunning = false;
+      }
+    }
+
+    // --- 子任务卡片渲染 ---
+    function renderTaskCards() {
+      const list = document.getElementById('taskList');
+      list.innerHTML = subTasks.map((t, i) => `
+        <div class="task-card" data-index="${i}">
+          <button class="btn-delete-task" title="删除" onclick="deleteTask(${i})">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <div class="task-card-header">
+            <span class="task-id-badge">${t.id}</span>
+            <input class="task-title-input" value="${escapeHtml(t.title)}" onchange="updateTaskField(${i}, 'title', this.value)">
+          </div>
+          <textarea class="task-desc-input" onchange="updateTaskField(${i}, 'description', this.value)">${escapeHtml(t.description || '')}</textarea>
+          <div class="task-meta">
+            ${(t.tools || []).map(tool => `<span class="task-tag task-tag-tool">${escapeHtml(tool)}</span>`).join('')}
+            ${(t.search_queries || []).map(q => `<span class="task-tag task-tag-query">${escapeHtml(q)}</span>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateTaskField(index, field, value) {
+      if (subTasks[index]) subTasks[index][field] = value;
+    }
+
+    function deleteTask(index) {
+      subTasks.splice(index, 1);
+      // 重新编号
+      subTasks.forEach((t, i) => t.id = i + 1);
+      renderTaskCards();
+    }
+
+    function addTask() {
+      subTasks.push({
+        id: subTasks.length + 1,
+        title: '新子任务',
+        description: '',
+        tools: ['web_search'],
+        search_queries: [],
+      });
+      renderTaskCards();
+      // 滚动到底部
+      const list = document.getElementById('taskList');
+      list.lastElementChild?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function backToInput() {
+      showPhase('input');
+      btnStart.disabled = false;
+      isRunning = false;
+    }
+
+    // --- Phase 2 -> Phase 3: Execute ---
+    async function confirmTasks() {
+      if (subTasks.length === 0) {
+        alert('请至少保留一个子任务');
+        return;
+      }
+
+      showPhase('execute');
+      renderExecutorProgress();
+
+      try {
+        const res = await fetch('/api/research/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: currentQuery, sub_tasks: subTasks }),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`API ${res.status}: ${text}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          let currentEvent = '';
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              currentEvent = line.slice(7);
+            } else if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6);
+              try {
+                const data = JSON.parse(dataStr);
+                handleSSEEvent(currentEvent, data);
+              } catch (e) {
+                // 忽略解析错误
+              }
+              currentEvent = '';
+            }
+          }
+        }
+      } catch (e) {
+        alert('执行失败: ' + e.message);
+        isRunning = false;
+      }
+    }
+
+    function handleSSEEvent(event, data) {
+      switch (event) {
+        case 'executor_start':
+          updateExecutorStatus(data.task_id, 'running');
+          break;
+        case 'executor_done':
+          const status = data.complete ? 'done' : 'error';
+          updateExecutorStatus(data.task_id, status);
+          break;
+        case 'generate_start':
+          document.getElementById('generatingHint').style.display = 'flex';
+          break;
+        case 'generate_done':
+          document.getElementById('generatingHint').style.display = 'none';
+          break;
+        case 'done':
+          // 研究完成，加载报告
+          if (data.report_id) {
+            loadReport(data.report_id);
+          }
+          isRunning = false;
+          loadHistory();
+          break;
+      }
+    }
+
+    // --- Executor 进度 ---
+    function renderExecutorProgress() {
+      const list = document.getElementById('executorList');
+      list.innerHTML = subTasks.map(t => `
+        <div class="executor-item" data-task-id="${t.id}">
+          <div class="executor-status-icon pending">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+          </div>
+          <span class="executor-name">${escapeHtml(t.title)}</span>
+          <span class="executor-badge pending">等待中</span>
+        </div>
+      `).join('');
+    }
+
+    function updateExecutorStatus(taskId, status) {
+      const item = document.querySelector(`.executor-item[data-task-id="${taskId}"]`);
+      if (!item) return;
+
+      const icon = item.querySelector('.executor-status-icon');
+      const badge = item.querySelector('.executor-badge');
+
+      icon.className = `executor-status-icon ${status}`;
+      badge.className = `executor-badge ${status}`;
+
+      const statusText = { pending: '等待中', running: '搜索中', done: '已完成', error: '失败' };
+      badge.textContent = statusText[status] || status;
+
+      // 更新图标
+      const icons = {
+        pending: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>',
+        running: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>',
+        done: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+        error: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+      };
+      icon.innerHTML = icons[status] || icons.pending;
+    }
+
+    // --- 加载报告 ---
+    async function loadReport(reportId) {
+      try {
+        const report = await api('GET', `/research/reports/${reportId}`);
+        reportText = report.content || '';
+        const reportSection = document.getElementById('reportSection');
+        const reportContent = document.getElementById('reportContent');
+        reportContent.innerHTML = marked.parse(reportText);
+        reportSection.style.display = 'block';
+        reportSection.scrollIntoView({ behavior: 'smooth' });
+      } catch (e) {
+        console.error('加载报告失败:', e);
+      }
+    }
+
+    // --- 历史研究 ---
+    async function loadHistory() {
+      try {
+        const reports = await api('GET', '/research/reports');
+        const list = document.getElementById('historyList');
+        if (!reports || reports.length === 0) {
+          list.innerHTML = '<li style="padding:16px;font-size:13px;color:rgba(241,240,247,0.4);text-align:center;">暂无研究记录</li>';
+          return;
+        }
+        list.innerHTML = reports.map(r => `
+          <li class="sidebar-item" onclick="viewReport(${r.id})">
+            <svg class="item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span class="item-text">${escapeHtml(r.query || '未命名研究')}</span>
+          </li>
+        `).join('');
+      } catch (e) {
+        console.error('加载历史失败:', e);
+      }
+    }
+
+    async function viewReport(reportId) {
+      try {
+        const report = await api('GET', `/research/reports/${reportId}`);
+        currentQuery = report.query || '';
+        reportText = report.content || '';
+        document.getElementById('topBarTitle').textContent = currentQuery.length > 30 ? currentQuery.slice(0, 30) + '...' : currentQuery;
+        document.getElementById('outlineText').textContent = '';
+        subTasks = [];
+
+        showPhase('execute');
+        document.getElementById('executorList').innerHTML = '';
+        document.getElementById('generatingHint').style.display = 'none';
+
+        const reportSection = document.getElementById('reportSection');
+        const reportContent = document.getElementById('reportContent');
+        reportContent.innerHTML = marked.parse(reportText);
+        reportSection.style.display = 'block';
+
+        // 高亮当前选中项
+        document.querySelectorAll('#historyList .sidebar-item').forEach(el => el.classList.remove('active'));
+        const item = document.querySelector(`#historyList .sidebar-item[onclick="viewReport(${reportId})"]`);
+        if (item) item.classList.add('active');
+
+        if (window.innerWidth <= 768) toggleSidebar();
+      } catch (e) {
+        console.error('查看报告失败:', e);
+      }
+    }
+
+    // --- 工具函数 ---
+    function showPhase(phase) {
+      phaseInput.style.display = phase === 'input' ? 'flex' : 'none';
+      phasePlan.style.display = phase === 'plan' ? 'block' : 'none';
+      phaseExecute.style.display = phase === 'execute' ? 'block' : 'none';
+    }
+
+    function newResearch() {
+      currentQuery = '';
+      subTasks = [];
+      reportText = '';
+      isRunning = false;
+      queryInput.value = '';
+      queryInput.style.height = 'auto';
+      btnStart.disabled = true;
+      document.getElementById('topBarTitle').textContent = '深度研究';
+      showPhase('input');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('mobileOverlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    }
+
+    function copyReport() {
+      navigator.clipboard.writeText(reportText).then(() => {
+        const btn = event.currentTarget;
+        const original = btn.innerHTML;
+        btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 已复制';
+        setTimeout(() => btn.innerHTML = original, 1500);
+      });
+    }
+
+    function downloadReport() {
+      const blob = new Blob([reportText], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `research_${new Date().toISOString().slice(0, 10)}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // --- 初始化 ---
+    loadHistory();
+  </script>
+</body>
+</html>

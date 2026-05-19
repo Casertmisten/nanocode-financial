@@ -56,6 +56,11 @@ MINERU_LIGHT_MAX_PAGES = 20
 # --- AKShare 数据源 ---
 AKSHARE_CACHE_TTL = int(os.environ.get("AKSHARE_CACHE_TTL", "3600"))
 
+# --- Deep Research ---
+RESEARCH_MAX_SUBTASKS = 8        # 最大子任务数
+RESEARCH_EXECUTOR_MAX_TURNS = 8  # Executor 最大工具调用轮次
+RESEARCH_EXECUTOR_TIMEOUT = 120  # 单个 Executor 超时（秒）
+
 # --- Web 服务 ---
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "app.db"))
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "data", "uploads"))

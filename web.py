@@ -14,6 +14,7 @@ from api.sessions import router as sessions_router
 from api.documents import router as documents_router
 from api.settings import router as settings_router
 from api.fra import router as fra_router
+from api.research import router as research_router
 from utils import BaseLogger
 
 log = BaseLogger.getLogger("web")
@@ -48,6 +49,7 @@ app.include_router(sessions_router)
 app.include_router(documents_router)
 app.include_router(settings_router)
 app.include_router(fra_router)
+app.include_router(research_router)
 log.info("API 路由注册完成")
 
 

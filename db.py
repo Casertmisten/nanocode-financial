@@ -96,6 +96,40 @@ async def init_db():
                 market TEXT DEFAULT '',
                 updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS research_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+                query TEXT NOT NULL,
+                content TEXT NOT NULL,
+                filepath TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS token_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+                model TEXT NOT NULL DEFAULT '',
+                prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                completion_tokens INTEGER NOT NULL DEFAULT 0,
+                total_tokens INTEGER NOT NULL DEFAULT 0,
+                source TEXT NOT NULL DEFAULT 'chat',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_token_usage_created
+                ON token_usage(created_at);
+            CREATE INDEX IF NOT EXISTS idx_token_usage_model
+                ON token_usage(model);
+
+            CREATE TABLE IF NOT EXISTS web_search_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                query TEXT NOT NULL,
+                answer TEXT DEFAULT '',
+                results TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_web_search_query ON web_search_cache(query);
         """)
         await db.commit()
         log.info("数据库初始化完成: %s", DB_PATH)
@@ -464,6 +498,189 @@ def get_cached_stock_list(keyword: str = "", limit: int = 50) -> list[dict]:
             cursor = conn.execute(
                 "SELECT code, name, market FROM stock_list LIMIT ?", (limit,),
             )
+        return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Research Reports CRUD
+# ---------------------------------------------------------------------------
+
+async def add_research_report(query: str, content: str, filepath: str,
+                               session_id: str | None = None) -> int:
+    """添加研究报告，返回报告 ID"""
+    now = _now()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO research_reports (session_id, query, content, filepath, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (session_id, query, content, filepath, now),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def list_research_reports(limit: int = 20) -> list[dict]:
+    """获取研究报告列表"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, session_id, query, filepath, created_at FROM research_reports "
+            "ORDER BY created_at DESC LIMIT ?", (limit,),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_dict(r) for r in rows]
+    finally:
+        await db.close()
+
+
+async def get_research_report(report_id: int) -> dict | None:
+    """获取单个研究报告"""
+    db = await get_db()
+    try:
+        cursor = await db.execute("SELECT * FROM research_reports WHERE id = ?", (report_id,))
+        row = await cursor.fetchone()
+        return _row_to_dict(row) if row else None
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# Token Usage CRUD
+# ---------------------------------------------------------------------------
+
+async def add_token_usage(
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    source: str = "chat",
+    session_id: str | None = None,
+) -> int:
+    """记录一次 LLM 调用的 token 用量，返回插入行 id"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO token_usage (session_id, model, prompt_tokens, completion_tokens, "
+            "total_tokens, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (session_id, model, prompt_tokens, completion_tokens, total_tokens, source, _now()),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def get_token_summary(days: int = 30) -> dict:
+    """获取 token 用量汇总统计"""
+    db = await get_db()
+    try:
+        # 总计
+        cursor = await db.execute(
+            "SELECT COALESCE(SUM(prompt_tokens), 0) as total_prompt, "
+            "COALESCE(SUM(completion_tokens), 0) as total_completion, "
+            "COALESCE(SUM(total_tokens), 0) as total_tokens, "
+            "COUNT(*) as total_calls "
+            "FROM token_usage WHERE created_at >= datetime('now', ?)",
+            (f"-{days} days",),
+        )
+        totals = _row_to_dict(await cursor.fetchone())
+
+        # 按模型分组
+        cursor = await db.execute(
+            "SELECT model, SUM(prompt_tokens) as prompt_tokens, "
+            "SUM(completion_tokens) as completion_tokens, "
+            "SUM(total_tokens) as total_tokens, COUNT(*) as calls "
+            "FROM token_usage WHERE created_at >= datetime('now', ?) "
+            "GROUP BY model ORDER BY total_tokens DESC",
+            (f"-{days} days",),
+        )
+        by_model = [_row_to_dict(r) for r in await cursor.fetchall()]
+
+        # 按来源分组
+        cursor = await db.execute(
+            "SELECT source, SUM(total_tokens) as total_tokens, COUNT(*) as calls "
+            "FROM token_usage WHERE created_at >= datetime('now', ?) "
+            "GROUP BY source ORDER BY total_tokens DESC",
+            (f"-{days} days",),
+        )
+        by_source = [_row_to_dict(r) for r in await cursor.fetchall()]
+
+        return {
+            "totals": totals,
+            "by_model": by_model,
+            "by_source": by_source,
+            "days": days,
+        }
+    finally:
+        await db.close()
+
+
+async def get_token_daily(days: int = 30) -> list[dict]:
+    """获取按天的 token 用量趋势"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT DATE(created_at) as date, "
+            "SUM(prompt_tokens) as prompt_tokens, "
+            "SUM(completion_tokens) as completion_tokens, "
+            "SUM(total_tokens) as total_tokens, COUNT(*) as calls "
+            "FROM token_usage WHERE created_at >= datetime('now', ?) "
+            "GROUP BY DATE(created_at) ORDER BY date",
+            (f"-{days} days",),
+        )
+        return [_row_to_dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+
+async def get_token_recent(limit: int = 50) -> list[dict]:
+    """获取最近的 token 用量明细"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT id, session_id, model, prompt_tokens, completion_tokens, "
+            "total_tokens, source, created_at FROM token_usage "
+            "ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        return [_row_to_dict(r) for r in await cursor.fetchall()]
+    finally:
+        await db.close()
+
+
+# ---------------------------------------------------------------------------
+# Web Search Cache CRUD
+# ---------------------------------------------------------------------------
+
+def save_web_search(query: str, answer: str, results: list[dict]) -> int:
+    """保存一次 Web 搜索结果，返回记录 ID（同步，供工具调用）"""
+    now = _now()
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cursor = conn.execute(
+            "INSERT INTO web_search_cache (query, answer, results, created_at) VALUES (?, ?, ?, ?)",
+            (query, answer, json.dumps(results, ensure_ascii=False), now),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_web_search_cache(query: str, limit: int = 5) -> list[dict]:
+    """按查询关键词模糊匹配已缓存的搜索结果（同步）"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.execute(
+            "SELECT * FROM web_search_cache WHERE query LIKE ? ORDER BY created_at DESC LIMIT ?",
+            (f"%{query}%", limit),
+        )
         return [dict(r) for r in cursor.fetchall()]
     finally:
         conn.close()

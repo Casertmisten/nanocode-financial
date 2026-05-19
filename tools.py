@@ -197,6 +197,45 @@ def stock_news_tool(args):
     return _fmt(news.get_stock_news(args["symbol"], args.get("limit", 10)))
 
 
+def web_search_tool(args):
+    """使用 Tavily 搜索互联网信息。"""
+    from tavily import TavilyClient
+    from dotenv import dotenv_values
+    import db
+
+    query = args["query"]
+    max_results = args.get("max_results", 5)
+    log.info("Web 搜索: query=%s, max_results=%d", query[:50], max_results)
+
+    try:
+        api_key = dotenv_values()["TAVILY_API_KEY"]
+        client = TavilyClient(api_key)
+        response = client.search(query=query, max_results=max_results, search_depth="advanced")
+
+        answer = response.get("answer", "")
+        results = response.get("results", [])
+        if not results:
+            return "未找到相关搜索结果。"
+
+        # 保存到数据库
+        try:
+            db.save_web_search(query, answer or "", results)
+            log.info("Web 搜索结果已保存到数据库: query=%s", query[:50])
+        except Exception:
+            log.warning("保存搜索结果失败", exc_info=True)
+
+        # 格式化输出
+        parts = []
+        if answer:
+            parts.append(f"【摘要】{answer}\n")
+        for i, r in enumerate(results, 1):
+            parts.append(f"{i}. {r.get('title', '')}\n   {r.get('content', '')}\n   链接: {r.get('url', '')}")
+        return "\n\n".join(parts)
+    except Exception as e:
+        log.error("Web 搜索失败: %s", e, exc_info=True)
+        return f"搜索失败: {e}"
+
+
 # --- Tool registry ---
 # (description, param_schema, function)
 
@@ -287,6 +326,12 @@ TOOLS = {
         "获取个股相关新闻。参数symbol为股票代码，limit为返回条数(可选，默认10)。",
         {"symbol": "string", "limit": "number?"},
         stock_news_tool,
+    ),
+    # --- Web 搜索工具 ---
+    "web_search": (
+        "使用搜索引擎搜索互联网信息，获取最新新闻、观点、数据等。返回搜索结果的标题、摘要和链接。",
+        {"query": "string", "max_results": "number?"},
+        web_search_tool,
     ),
 }
 
