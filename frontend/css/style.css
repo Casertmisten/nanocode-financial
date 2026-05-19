@@ -300,6 +300,7 @@ ul, ol {
 
 /* 底部导航 */
 .sidebar-nav {
+  flex-shrink: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: var(--stack-sm);
 }

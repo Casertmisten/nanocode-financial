@@ -669,6 +669,49 @@
     .message-content hr { border: none; border-top: 1px solid var(--color-border); margin: 0.8em 0; }
     .message-content strong { font-weight: 600; }
 
+    /* 信息来源可折叠横条 */
+    .message-sources {
+      margin-bottom: 6px;
+      font: var(--font-caption);
+      color: var(--color-outline);
+    }
+    .message-sources-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      background: var(--color-bg-hover);
+      cursor: pointer;
+      user-select: none;
+      transition: background var(--transition-fast);
+    }
+    .message-sources-bar:hover { background: var(--color-border); }
+    .message-sources-bar::before {
+      content: '●';
+      font-size: 8px;
+      color: var(--color-primary);
+    }
+    .message-sources-bar .sources-label { flex: 1; }
+    .message-sources-bar .sources-arrow {
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+    .message-sources.open .sources-arrow { transform: rotate(90deg); }
+    .message-sources-body {
+      display: none;
+      padding: 6px 10px;
+      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      background: var(--color-bg-hover);
+      margin-top: 2px;
+    }
+    .message-sources.open .message-sources-body { display: block; }
+    .message-sources-body ul, .message-sources-body p {
+      margin: 0.2em 0;
+      padding-left: 1.2em;
+      font-size: 0.92em;
+    }
+
     /* 深度研究模式指示 */
     .toolbar-btn.deep-research-active {
       background: var(--color-primary) !important;
@@ -755,7 +798,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           知识库
         </a>
-                <a href="stats.html" class="nav-item">
+        <a href="stats.html" class="nav-item">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
           Token 统计
         </a>
@@ -837,10 +880,10 @@
           </button>
 
           <!-- 深度研究开关 -->
-          <button class="toolbar-btn" id="btnDeepResearch" onclick="toggleDeepResearch()">
+          <!-- <button class="toolbar-btn" id="btnDeepResearch" onclick="toggleDeepResearch()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
             <span>深度研究</span>
-          </button>
+          </button> -->
           <!-- 知识库弹出面板 -->
           <div class="kb-panel" id="kbPanel">
             <div class="kb-panel-tabs">
@@ -868,6 +911,25 @@
 
   <script src="js/api.js"></script>
   <script>
+    // --- 信息来源提取 ---
+    function extractSources(text) {
+      const idx = text.lastIndexOf('【信息来源】');
+      if (idx === -1) return { content: text, sources: null };
+      const content = text.slice(0, idx).trimEnd();
+      const sources = text.slice(idx + '【信息来源】'.length).trim();
+      return sources ? { content, sources } : { content, sources: null };
+    }
+
+    function renderSourcesHtml(sources) {
+      return `<div class="message-sources" onclick="this.classList.toggle('open')">
+        <div class="message-sources-bar">
+          <span class="sources-label">信息来源</span>
+          <span class="sources-arrow">▶</span>
+        </div>
+        <div class="message-sources-body">${marked.parse(sources)}</div>
+      </div>`;
+    }
+
     // --- 状态管理 ---
     let messages = [];
     let isLoading = false;
@@ -1001,18 +1063,24 @@
               </div>
             </div>`;
         }
+        const raw = msg.content;
+        const isHtml = msg._html;
+        const { content: mainContent, sources } = extractSources(raw);
+        const contentHtml = isHtml ? mainContent : marked.parse(mainContent);
+        const sourcesHtml = sources ? renderSourcesHtml(sources) : '';
         return `
           <div class="message message-assistant">
             <div class="message-avatar">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             </div>
             <div class="message-body">
-              <div class="message-content">${msg.role === 'assistant' ? (msg._html ? msg.content : marked.parse(msg.content)) : escapeHtml(msg.content)}</div>
+              ${sourcesHtml}
+              <div class="message-content">${contentHtml}</div>
               <div class="message-meta">
                 <span>${time}</span>
               </div>
               <div class="message-actions">
-                <button class="message-action-btn" onclick="copyMessage(this, '${escapeAttr(msg.content)}')">
+                <button class="message-action-btn" onclick="copyMessage(this, '${escapeAttr(raw)}')">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
                   复制
                 </button>
@@ -1042,6 +1110,7 @@
 
       let fullReply = '';
       let streamEl = null;
+      let sourcesEl = null;
 
       ssePost('/chat', {
         session_id: currentChatId,
@@ -1069,7 +1138,20 @@
           } else {
             messages[messages.length - 1].content = fullReply;
           }
-          streamEl.innerHTML = marked.parse(fullReply);
+          // 拆分信息来源
+          const { content: mainContent, sources } = extractSources(fullReply);
+          streamEl.innerHTML = marked.parse(mainContent);
+          if (sources) {
+            const body = streamEl.closest('.message-body');
+            if (!sourcesEl) {
+              sourcesEl = document.createElement('div');
+              sourcesEl.innerHTML = renderSourcesHtml(sources);
+              body.insertBefore(sourcesEl.firstElementChild, body.querySelector('.message-content'));
+              sourcesEl = body.querySelector('.message-sources');
+            } else {
+              sourcesEl.querySelector('.message-sources-body').innerHTML = marked.parse(sources);
+            }
+          }
           scrollToBottom();
         },
         onDone: () => {

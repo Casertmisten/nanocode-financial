@@ -167,9 +167,22 @@ def main():
 
             messages.append({"role": "user", "content": user_input})
 
+            # 注入知识库文档列表到系统提示词
+            turn_prompt = system_prompt
+            try:
+                import db
+                docs = db.get_document_titles()
+                if docs:
+                    doc_lines = "\n".join(f"- {d['title']} ({d['file_type']})" for d in docs)
+                else:
+                    doc_lines = "（知识库为空，暂无文档）"
+                turn_prompt = system_prompt.replace("{documents}", doc_lines)
+            except Exception:
+                turn_prompt = system_prompt.replace("{documents}", "（知识库为空，暂无文档）")
+
             # RAG QA
             print(f"{config.YELLOW}⏺ 知识问答{config.RESET}")
-            _run_agentic_loop(messages, system_prompt)
+            _run_agentic_loop(messages, turn_prompt)
             print()
 
         except SystemExit:
