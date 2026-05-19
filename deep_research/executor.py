@@ -44,13 +44,16 @@ async def execute_task(sub_task: SubTask) -> ExecutorResult:
     max_turns = config.RESEARCH_EXECUTOR_MAX_TURNS
     content_parts: list[str] = []
     last_turn_had_tools = False
+    accumulated_usage: dict = {}  # 累积 token 用量
 
     for turn in range(max_turns):
         content_parts = []
         tool_calls_map: dict[int, dict] = {}
+        usage_turn: dict = {}
 
         async for chunk in llm.async_stream_chat(
             messages, executor_system_prompt, tools=task_schema if task_schema else None,
+            usage_out=usage_turn,
         ):
             choices = chunk.get("choices", [])
             if not choices:
@@ -84,6 +87,10 @@ async def execute_task(sub_task: SubTask) -> ExecutorResult:
         if not tool_calls_map:
             last_turn_had_tools = False
             break
+
+        # 累积 token 用量
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            accumulated_usage[key] = accumulated_usage.get(key, 0) + usage_turn.get(key, 0)
 
         last_turn_had_tools = True
 
@@ -142,4 +149,5 @@ async def execute_task(sub_task: SubTask) -> ExecutorResult:
         sources=sources,
         raw_data=raw_data,
         complete=not last_turn_had_tools,
+        usage=accumulated_usage,
     )

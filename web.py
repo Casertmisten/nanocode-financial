@@ -15,6 +15,7 @@ from api.documents import router as documents_router
 from api.settings import router as settings_router
 from api.fra import router as fra_router
 from api.research import router as research_router
+from api.token_stats import router as token_stats_router
 from utils import BaseLogger
 
 log = BaseLogger.getLogger("web")
@@ -50,6 +51,7 @@ app.include_router(documents_router)
 app.include_router(settings_router)
 app.include_router(fra_router)
 app.include_router(research_router)
+app.include_router(token_stats_router)
 log.info("API 路由注册完成")
 
 
@@ -69,7 +71,7 @@ async def index():
 @app.get("/api/models")
 async def list_models():
     return [
-        {"id": "qwen-max", "name": "Qwen-Max", "provider": "阿里巴巴"},
+        {"id": "qwen3.5-35b-a3b", "name": "Qwen3.5-35b-a3b", "provider": "阿里巴巴"},
         {"id": "qwen-plus", "name": "Qwen-Plus", "provider": "阿里巴巴"},
         {"id": "qwen3.6-flash", "name": "Qwen3.6-Flash", "provider": "阿里巴巴"},
         {"id": "deepseek-v4-pro", "name": "DeepSeek-V4-Pro", "provider": "DeepSeek"},

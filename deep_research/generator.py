@@ -9,7 +9,7 @@ from deep_research.schemas import ExecutorResult
 log = logging.getLogger(__name__)
 
 
-def generate(query: str, results: list[ExecutorResult]) -> str:
+def generate(query: str, results: list[ExecutorResult], usage_out: dict | None = None) -> str:
     """执行 Generator Agent，生成完整研究报告。"""
     log.info("Generator 开始: query=%s, 子任务数=%d", query[:50], len(results))
 
@@ -30,7 +30,7 @@ def generate(query: str, results: list[ExecutorResult]) -> str:
 
 请根据以上研究结果，撰写一份完整的研究报告。"""
 
-    report = llm.call_llm(generator_system_prompt, user_prompt)
+    report = llm.call_llm(generator_system_prompt, user_prompt, usage_out=usage_out)
 
     log.info("Generator 完成: 报告长度=%d", len(report))
     return report

@@ -22,3 +22,4 @@ class ExecutorResult:
     sources: list[str] = field(default_factory=list)
     raw_data: list[str] = field(default_factory=list)
     complete: bool = True  # 是否完整完成（超时则为 False）
+    usage: dict = field(default_factory=dict)  # 累积 token 用量

@@ -60,6 +60,7 @@ async def _agentic_loop(
     messages: list[dict],
     model: str | None,
     doc_filepaths: list[str] | None = None,
+    session_id: str | None = None,
 ) -> AsyncIterator[str]:
     """异步 agentic loop，yield SSE 事件字符串。"""
     tools_schema = tools.make_schema()
@@ -69,9 +70,11 @@ async def _agentic_loop(
     for turn in range(max_turns):
         content_parts: list[str] = []
         tool_calls_map: dict[int, dict] = {}  # index -> {id, name, arguments}
+        usage_turn: dict = {}
 
         async for chunk in llm.async_stream_chat(
             llm_messages, SYSTEM_PROMPT, tools=tools_schema, model=model,
+            usage_out=usage_turn,
         ):
             choices = chunk.get("choices", [])
             if not choices:
@@ -103,6 +106,19 @@ async def _agentic_loop(
                         entry["function"]["arguments"] += fn["arguments"]
 
         if not tool_calls_map:
+            # 记录本轮 token 用量
+            if usage_turn.get("total_tokens"):
+                try:
+                    await db.add_token_usage(
+                        model=model or config.MODEL,
+                        prompt_tokens=usage_turn.get("prompt_tokens", 0),
+                        completion_tokens=usage_turn.get("completion_tokens", 0),
+                        total_tokens=usage_turn.get("total_tokens", 0),
+                        source="chat",
+                        session_id=session_id,
+                    )
+                except Exception as e:
+                    log.warning("记录 token 用量失败: %s", e)
             break
 
         assistant_msg: dict = {
@@ -142,6 +158,20 @@ async def _agentic_loop(
         if turn == max_turns - 1:
             log.warning("agentic loop 达到最大轮次 %d", max_turns)
 
+        # 记录本轮（有工具调用）的 token 用量
+        if usage_turn.get("total_tokens"):
+            try:
+                await db.add_token_usage(
+                    model=model or config.MODEL,
+                    prompt_tokens=usage_turn.get("prompt_tokens", 0),
+                    completion_tokens=usage_turn.get("completion_tokens", 0),
+                    total_tokens=usage_turn.get("total_tokens", 0),
+                    source="chat",
+                    session_id=session_id,
+                )
+            except Exception as e:
+                log.warning("记录 token 用量失败: %s", e)
+
 
 @router.post("/chat")
 async def chat(req: ChatRequest):
@@ -180,7 +210,7 @@ async def chat(req: ChatRequest):
     async def stream():
         full_content: list[str] = []
 
-        async for sse_str in _agentic_loop(llm_messages, req.model, doc_filepaths):
+        async for sse_str in _agentic_loop(llm_messages, req.model, doc_filepaths, req.session_id):
             # 解析事件类型
             lines = sse_str.strip().split("\n")
             event_type = lines[0].replace("event: ", "")

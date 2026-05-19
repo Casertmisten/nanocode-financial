@@ -15,9 +15,9 @@ from deep_research.generator import generate as _generate
 log = logging.getLogger(__name__)
 
 
-def plan(query: str) -> tuple[str, list[SubTask]]:
+def plan(query: str, usage_out: dict | None = None) -> tuple[str, list[SubTask]]:
     """Plan 阶段：拆解问题为子任务列表。"""
-    return _plan(query)
+    return _plan(query, usage_out=usage_out)
 
 
 async def execute(query: str, sub_tasks: list[SubTask]) -> tuple[list[ExecutorResult], str, int, str]:
@@ -50,7 +50,8 @@ async def execute(query: str, sub_tasks: list[SubTask]) -> tuple[list[ExecutorRe
     results_list = list(results)
 
     # Generator 阶段
-    report = _generate(query, results_list)
+    gen_usage: dict = {}
+    report = _generate(query, results_list, usage_out=gen_usage)
 
     # 保存报告
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

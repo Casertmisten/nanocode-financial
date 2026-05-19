@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token 用量统计 - FinAssist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    .stats-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--stack-lg) calc(var(--stack-lg) * 2);
+    }
+
+    .stats-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--stack-lg);
+    }
+
+    .stats-header h2 {
+      font: var(--font-headline-lg);
+      font-size: 24px;
+      color: var(--color-on-surface);
+    }
+
+    .days-selector {
+      display: flex;
+      gap: 4px;
+      background: var(--color-surface-container);
+      border-radius: var(--radius-md);
+      padding: 3px;
+    }
+
+    .days-selector button {
+      padding: 6px 14px;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      font: var(--font-label-md);
+      color: var(--color-on-surface-variant);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .days-selector button.active {
+      background: var(--color-primary);
+      color: var(--color-on-primary);
+    }
+
+    /* 汇总卡片 */
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--stack-md);
+      margin-bottom: var(--stack-lg);
+    }
+
+    .summary-card {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--stack-md) var(--stack-lg);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .summary-card .label {
+      font: var(--font-label-md);
+      color: var(--color-on-surface-variant);
+    }
+
+    .summary-card .value {
+      font: var(--font-display-lg);
+      font-size: 28px;
+      color: var(--color-on-surface);
+    }
+
+    .summary-card .sub {
+      font: var(--font-label-sm);
+      color: var(--color-on-surface-variant);
+    }
+
+    /* 图表区域 */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: var(--stack-lg);
+      margin-bottom: var(--stack-lg);
+    }
+
+    .chart-card {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--stack-lg);
+    }
+
+    .chart-card h3 {
+      font: var(--font-title-md);
+      color: var(--color-on-surface);
+      margin-bottom: var(--stack-md);
+    }
+
+    .chart-card canvas {
+      max-height: 280px;
+    }
+
+    /* 明细表格 */
+    .detail-card {
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--stack-lg);
+    }
+
+    .detail-card h3 {
+      font: var(--font-title-md);
+      color: var(--color-on-surface);
+      margin-bottom: var(--stack-md);
+    }
+
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font: var(--font-body-sm);
+    }
+
+    .detail-table th {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--color-border);
+      color: var(--color-on-surface-variant);
+      font: var(--font-label-md);
+    }
+
+    .detail-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--color-border);
+      color: var(--color-on-surface);
+    }
+
+    .detail-table tr:hover td {
+      background: var(--color-surface-container-low);
+    }
+
+    .source-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      font: var(--font-label-sm);
+      background: var(--color-primary-fixed);
+      color: var(--color-primary);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: var(--stack-xl);
+      color: var(--color-on-surface-variant);
+      font: var(--font-body-md);
+    }
+
+    @media (max-width: 900px) {
+      .summary-cards { grid-template-columns: repeat(2, 1fr); }
+      .charts-row { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      .summary-cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">FA</div>
+        <span class="sidebar-title">FinAssist</span>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="chat.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          对话
+        </a>
+        <a href="research.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          深度研究
+        </a>
+        <a href="knowledge.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          知识库
+        </a>
+        <a href="stats.html" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          Token 统计
+        </a>
+        <a href="settings.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          设置
+        </a>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <button class="btn-icon btn-hamburger" onclick="toggleSidebar()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <h1 class="top-bar-title">Token 用量统计</h1>
+        </div>
+      </div>
+
+      <div class="stats-content">
+        <!-- 时间范围选择 -->
+        <div class="stats-header">
+          <h2>用量概览</h2>
+          <div class="days-selector">
+            <button onclick="setDays(7)">7天</button>
+            <button onclick="setDays(30)" class="active">30天</button>
+            <button onclick="setDays(90)">90天</button>
+            <button onclick="setDays(365)">全年</button>
+          </div>
+        </div>
+
+        <!-- 汇总卡片 -->
+        <div class="summary-cards">
+          <div class="summary-card">
+            <span class="label">总 Token</span>
+            <span class="value" id="totalTokens">-</span>
+          </div>
+          <div class="summary-card">
+            <span class="label">输入 Token</span>
+            <span class="value" id="promptTokens">-</span>
+          </div>
+          <div class="summary-card">
+            <span class="label">输出 Token</span>
+            <span class="value" id="completionTokens">-</span>
+          </div>
+          <div class="summary-card">
+            <span class="label">API 调用次数</span>
+            <span class="value" id="totalCalls">-</span>
+          </div>
+        </div>
+
+        <!-- 图表 -->
+        <div class="charts-row">
+          <div class="chart-card">
+            <h3>每日用量趋势</h3>
+            <canvas id="dailyChart"></canvas>
+          </div>
+          <div class="chart-card">
+            <h3>按模型分布</h3>
+            <canvas id="modelChart"></canvas>
+          </div>
+        </div>
+
+        <!-- 来源分布 + 最近明细 -->
+        <div class="charts-row" style="grid-template-columns: 1fr 2fr;">
+          <div class="chart-card">
+            <h3>按来源分布</h3>
+            <canvas id="sourceChart"></canvas>
+          </div>
+          <div class="detail-card">
+            <h3>最近调用明细</h3>
+            <table class="detail-table">
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>模型</th>
+                  <th>来源</th>
+                  <th>输入</th>
+                  <th>输出</th>
+                  <th>总计</th>
+                </tr>
+              </thead>
+              <tbody id="recentTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let currentDays = 30;
+    let dailyChartInstance = null;
+    let modelChartInstance = null;
+    let sourceChartInstance = null;
+
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+    }
+
+    function formatNumber(n) {
+      if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+      if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+      return String(n);
+    }
+
+    function setDays(d) {
+      currentDays = d;
+      document.querySelectorAll('.days-selector button').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      loadAll();
+    }
+
+    async function loadSummary() {
+      const resp = await fetch(`/api/token-stats/summary?days=${currentDays}`);
+      const data = await resp.json();
+      const t = data.totals;
+      document.getElementById('totalTokens').textContent = formatNumber(t.total_tokens || 0);
+      document.getElementById('promptTokens').textContent = formatNumber(t.total_prompt || 0);
+      document.getElementById('completionTokens').textContent = formatNumber(t.total_completion || 0);
+      document.getElementById('totalCalls').textContent = formatNumber(t.total_calls || 0);
+      return data;
+    }
+
+    async function loadDaily() {
+      const resp = await fetch(`/api/token-stats/daily?days=${currentDays}`);
+      const data = await resp.json();
+
+      const labels = data.map(d => d.date?.slice(5) || '');
+      const totals = data.map(d => d.total_tokens || 0);
+      const prompts = data.map(d => d.prompt_tokens || 0);
+      const completions = data.map(d => d.completion_tokens || 0);
+
+      if (dailyChartInstance) dailyChartInstance.destroy();
+
+      const ctx = document.getElementById('dailyChart').getContext('2d');
+      dailyChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: '总计',
+              data: totals,
+              borderColor: '#00236f',
+              backgroundColor: 'rgba(0, 35, 111, 0.1)',
+              fill: true,
+              tension: 0.3,
+            },
+            {
+              label: '输入',
+              data: prompts,
+              borderColor: '#6366f1',
+              borderDash: [4, 4],
+              tension: 0.3,
+            },
+            {
+              label: '输出',
+              data: completions,
+              borderColor: '#10b981',
+              borderDash: [4, 4],
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: v => formatNumber(v) },
+            },
+            x: { ticks: { maxRotation: 45 } },
+          },
+        },
+      });
+    }
+
+    async function loadModelChart(summaryData) {
+      const models = summaryData.by_model || [];
+      const colors = ['#00236f', '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+      if (modelChartInstance) modelChartInstance.destroy();
+
+      const ctx = document.getElementById('modelChart').getContext('2d');
+      modelChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: models.map(m => m.model || 'unknown'),
+          datasets: [{
+            data: models.map(m => m.total_tokens || 0),
+            backgroundColor: colors.slice(0, models.length),
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12 } },
+          },
+        },
+      });
+    }
+
+    async function loadSourceChart(summaryData) {
+      const sources = summaryData.by_source || [];
+      const sourceLabels = { chat: '对话', fra: '财报分析', research: '深度研究' };
+      const colors = ['#00236f', '#10b981', '#f59e0b'];
+
+      if (sourceChartInstance) sourceChartInstance.destroy();
+
+      const ctx = document.getElementById('sourceChart').getContext('2d');
+      sourceChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: sources.map(s => sourceLabels[s.source] || s.source),
+          datasets: [{
+            data: sources.map(s => s.total_tokens || 0),
+            backgroundColor: colors.slice(0, sources.length),
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { usePointStyle: true, padding: 12 } },
+          },
+        },
+      });
+    }
+
+    async function loadRecent() {
+      const resp = await fetch('/api/token-stats/recent?limit=30');
+      const data = await resp.json();
+      const tbody = document.getElementById('recentTable');
+
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无调用记录</td></tr>';
+        return;
+      }
+
+      const sourceLabels = { chat: '对话', fra: '财报分析', research: '深度研究' };
+      tbody.innerHTML = data.map(r => {
+        const time = r.created_at ? new Date(r.created_at).toLocaleString('zh-CN') : '-';
+        return `<tr>
+          <td>${time}</td>
+          <td>${r.model || '-'}</td>
+          <td><span class="source-badge">${sourceLabels[r.source] || r.source}</span></td>
+          <td>${formatNumber(r.prompt_tokens || 0)}</td>
+          <td>${formatNumber(r.completion_tokens || 0)}</td>
+          <td>${formatNumber(r.total_tokens || 0)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function loadAll() {
+      const summaryData = await loadSummary();
+      await Promise.all([
+        loadDaily(),
+        loadModelChart(summaryData),
+        loadSourceChart(summaryData),
+        loadRecent(),
+      ]);
+    }
+
+    loadAll();
+  </script>
+</body>
+</html>

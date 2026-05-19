@@ -755,6 +755,10 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
           知识库
         </a>
+                <a href="stats.html" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          Token 统计
+        </a>
         <a href="settings.html" class="nav-item">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           设置
@@ -932,6 +936,30 @@
     function sendMessage() {
       const text = chatInput.value.trim();
       if (!text || isLoading) return;
+
+      // 深度研究等待确认阶段：拦截确认/重新规划
+      if (window._drWaitingConfirm) {
+        chatInput.value = '';
+        chatInput.style.height = 'auto';
+        btnSend.disabled = true;
+
+        if (text === '确认' || text === '开始' || text === '确认开始' || text === 'ok' || text === 'OK') {
+          window._drWaitingConfirm = false;
+          addMessage('user', text);
+          executeDeepResearch(window._drQuery, window._drSubTasks);
+        } else {
+          // 用新输入重新规划
+          window._drWaitingConfirm = false;
+          welcomeScreen.style.display = 'none';
+          messagesContainer.style.display = 'block';
+          addMessage('user', text);
+          btnSend.disabled = true;
+          if (deepResearchActive) {
+            startDeepResearch(text);
+          }
+        }
+        return;
+      }
 
       // 隐藏欢迎界面
       welcomeScreen.style.display = 'none';
@@ -1419,52 +1447,15 @@
         addMessage('assistant', cardHtml);
 
         // 等待用户确认
-        const waitForConfirm = () => {
-          const originalHandler = chatInput.onkeydown;
-          const originalSend = sendMessage;
-          // 临时覆盖发送行为
-          window._drOriginalSend = originalSend;
-          window._drWaitingConfirm = true;
-          window._drQuery = query;
-          window._drSubTasks = data.sub_tasks;
-        };
-        waitForConfirm();
+        window._drWaitingConfirm = true;
+        window._drQuery = query;
+        window._drSubTasks = data.sub_tasks;
 
       } catch (e) {
         addMessage('assistant', `**规划失败：** ${e.message}`);
       }
       isLoading = false;
     }
-
-    // 覆盖 sendMessage 以拦截确认
-    const _originalSendMessage = sendMessage;
-    sendMessage = function() {
-      const text = chatInput.value.trim();
-      // 深度研究等待确认阶段
-      if (window._drWaitingConfirm && text) {
-        chatInput.value = '';
-        chatInput.style.height = 'auto';
-        btnSend.disabled = true;
-
-        if (text === '确认' || text === '开始' || text === '确认开始' || text === 'ok' || text === 'OK') {
-          window._drWaitingConfirm = false;
-          executeDeepResearch(window._drQuery, window._drSubTasks);
-        } else {
-          // 用新输入重新规划
-          window._drWaitingConfirm = false;
-          welcomeScreen.style.display = 'none';
-          messagesContainer.style.display = 'block';
-          addMessage('user', text);
-          btnSend.disabled = true;
-          if (deepResearchActive) {
-            startDeepResearch(text);
-          }
-        }
-        return;
-      }
-      // 正常发送
-      _originalSendMessage();
-    };
 
     async function executeDeepResearch(query, subTasks) {
       isLoading = true;

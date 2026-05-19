@@ -10,19 +10,12 @@ from deep_research.schemas import SubTask
 log = logging.getLogger(__name__)
 
 
-def plan(query: str) -> tuple[str, list[SubTask]]:
-    """执行 Plan Agent，返回研究框架和子任务列表。
-
-    Args:
-        query: 用户研究问题。
-
-    Returns:
-        (research_outline, sub_tasks)
-    """
+def plan(query: str, usage_out: dict | None = None) -> tuple[str, list[SubTask]]:
+    """执行 Plan Agent，返回研究框架和子任务列表。"""
     log.info("Plan Agent 开始: query=%s", query[:80])
 
     user_prompt = f"请将以下研究问题拆解为子任务：\n\n{query}"
-    response = llm.call_llm(plan_system_prompt, user_prompt)
+    response = llm.call_llm(plan_system_prompt, user_prompt, usage_out=usage_out)
 
     # 解析 JSON（兼容 LLM 输出前后可能有的 markdown 代码块标记）
     text = response.strip()

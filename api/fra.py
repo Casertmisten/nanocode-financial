@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 
 import config
 import db
+import llm
 from prompts.financial_report_analysis import (
     analyze_prompt,
     analyze_system_prompt,
@@ -25,14 +26,7 @@ router = APIRouter(prefix="/api/fra", tags=["fra"])
 async def _run_fra_stream(query: str, session_id: str | None = None):
     """执行 FRA 流程，逐阶段 SSE 推送。"""
     from financial_report_analysis.template import DIMENSIONS
-    from prompts.financial_report_analysis import (
-        analyze_prompt,
-        analyze_system_prompt,
-        reduce_prompt,
-        reduce_system_prompt,
-    )
     import rag
-    import llm
 
     _TOP_K = 3
     log.info("开始 FRA 分析: query=%s, session=%s", query[:50], session_id)
@@ -78,8 +72,23 @@ async def _run_fra_stream(query: str, session_id: str | None = None):
         else:
             chunks_text = "\n\n---\n\n".join(dd["chunks"])
             prompt = analyze_prompt.format(dimension_name=dd["name"], chunks=chunks_text)
-            summaries[dd["name"]] = llm.call_llm(analyze_system_prompt, prompt)
+            analyze_usage: dict = {}
+            summaries[dd["name"]] = llm.call_llm(analyze_system_prompt, prompt, usage_out=analyze_usage)
             log.info("维度 [%s] 分析完成, 结果长度=%d", dd["name"], len(summaries[dd["name"]]))
+
+            # 记录 token 用量
+            if analyze_usage.get("total_tokens"):
+                try:
+                    await db.add_token_usage(
+                        model=config.MODEL,
+                        prompt_tokens=analyze_usage.get("prompt_tokens", 0),
+                        completion_tokens=analyze_usage.get("completion_tokens", 0),
+                        total_tokens=analyze_usage.get("total_tokens", 0),
+                        source="fra",
+                        session_id=session_id,
+                    )
+                except Exception as e:
+                    log.warning("记录 FRA 分析 token 用量失败: %s", e)
 
     # 汇总来源
     all_sources = set()
@@ -94,8 +103,23 @@ async def _run_fra_stream(query: str, session_id: str | None = None):
         summaries_text += f"\n## {dim['name']}\n{summaries[dim['name']]}\n"
     sources_text = "\n".join(f"· {s}" for s in sorted(all_sources))
     prompt = reduce_prompt.format(query=query, summaries=summaries_text, sources=sources_text)
-    report = llm.call_llm(reduce_system_prompt, prompt)
+    reduce_usage: dict = {}
+    report = llm.call_llm(reduce_system_prompt, prompt, usage_out=reduce_usage)
     log.info("报告生成完成, 长度=%d", len(report))
+
+    # 记录报告生成 token 用量
+    if reduce_usage.get("total_tokens"):
+        try:
+            await db.add_token_usage(
+                model=config.MODEL,
+                prompt_tokens=reduce_usage.get("prompt_tokens", 0),
+                completion_tokens=reduce_usage.get("completion_tokens", 0),
+                total_tokens=reduce_usage.get("total_tokens", 0),
+                source="fra",
+                session_id=session_id,
+            )
+        except Exception as e:
+            log.warning("记录 FRA 汇总 token 用量失败: %s", e)
 
     # 保存报告
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
