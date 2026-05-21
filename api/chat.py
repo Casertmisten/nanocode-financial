@@ -13,6 +13,7 @@ import llm
 import tools
 from prompts.main_prompts import system_prompt as _SYSTEM_PROMPT_TEMPLATE
 from utils import BaseLogger
+import memory as memory_module
 
 log = BaseLogger.getLogger("chat")
 
@@ -200,7 +201,11 @@ async def chat(req: ChatRequest):
         await db.update_session(req.session_id, title=title)
         log.info("新会话自动标题: %s", title)
 
-    llm_messages = _messages_to_llm_format(messages_raw)
+    # 三层记忆注入
+    compressed_msgs, memory_injection = await memory_module.inject_memory(
+        req.session_id, messages_raw, req.message,
+    )
+    llm_messages = _messages_to_llm_format(compressed_msgs)
     log.info("加载历史消息 %d 条，转换为 %d 条 LLM 格式", len(messages_raw), len(llm_messages))
 
     # 解析选中的文档为文件路径
@@ -229,6 +234,10 @@ async def chat(req: ChatRequest):
             turn_system_prompt = SYSTEM_PROMPT.replace("{documents}", doc_lines)
         except Exception:
             turn_system_prompt = SYSTEM_PROMPT.replace("{documents}", "（知识库为空，暂无文档）")
+
+        # 追加三层记忆到 system prompt
+        if memory_injection:
+            turn_system_prompt = turn_system_prompt + "\n\n" + memory_injection
 
         async for sse_str in _agentic_loop(
             llm_messages, req.model, doc_filepaths, req.session_id,
@@ -266,6 +275,16 @@ async def chat(req: ChatRequest):
         )
 
         log.info("对话完成: session=%s, message_id=%d, 回复长度=%d", req.session_id, message_id, len(content))
+
+        # 保存三层记忆（异步后台执行，不阻塞响应）
+        import asyncio
+        try:
+            all_session_msgs = await db.get_messages(req.session_id)
+            asyncio.create_task(
+                memory_module.save_after_turn(req.session_id, all_session_msgs)
+            )
+        except Exception:
+            log.warning("触发记忆保存失败", exc_info=True)
 
         # 发送完成事件
         yield _sse("done", {"message_id": message_id})
