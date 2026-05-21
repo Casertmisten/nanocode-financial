@@ -61,6 +61,18 @@ RESEARCH_MAX_SUBTASKS = 8        # 最大子任务数
 RESEARCH_EXECUTOR_MAX_TURNS = 8  # Executor 最大工具调用轮次
 RESEARCH_EXECUTOR_TIMEOUT = 120  # 单个 Executor 超时（秒）
 
+# --- Memory ---
+MEMORY_PROFILE_PATH = os.path.join(BASE_DIR, "data", "profile.json")
+MEMORY_CANDIDATES_PATH = os.path.join(BASE_DIR, "data", "profile_candidates.json")
+MEMORY_SESSION_COLLECTION = "session_memory"
+MEMORY_SESSION_MAX_TOKENS = int(os.environ.get("MEMORY_SESSION_MAX_TOKENS", "6000"))
+MEMORY_COMPRESS_ROUNDS = 3
+MEMORY_TIME_DECAY_LAMBDA = float(os.environ.get("MEMORY_TIME_DECAY_LAMBDA", "0.05"))
+MEMORY_CROSS_SESSION_TOP_K = int(os.environ.get("MEMORY_CROSS_SESSION_TOP_K", "5"))
+MEMORY_CROSS_SESSION_INJECT_K = int(os.environ.get("MEMORY_CROSS_SESSION_INJECT_K", "3"))
+MEMORY_PROFILE_UPDATE_INTERVAL = int(os.environ.get("MEMORY_PROFILE_UPDATE_INTERVAL", "3"))
+MEMORY_MIN_KEEP_ROUNDS = 5
+
 # --- Web 服务 ---
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "app.db"))
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(BASE_DIR, "data", "uploads"))

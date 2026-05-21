@@ -130,6 +130,18 @@ async def init_db():
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_web_search_query ON web_search_cache(query);
+
+            CREATE TABLE IF NOT EXISTS session_summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                start_msg_id INTEGER,
+                end_msg_id INTEGER,
+                summary TEXT NOT NULL,
+                token_count INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_session_summaries_session
+                ON session_summaries(session_id);
         """)
         await db.commit()
         log.info("数据库初始化完成: %s", DB_PATH)
@@ -697,3 +709,38 @@ def get_web_search_cache(query: str, limit: int = 5) -> list[dict]:
         return [dict(r) for r in cursor.fetchall()]
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Session Summaries CRUD（L3 当前会话压缩）
+# ---------------------------------------------------------------------------
+
+async def add_session_summary(session_id: str, start_msg_id: int, end_msg_id: int,
+                               summary: str, token_count: int = 0) -> int:
+    """添加会话摘要，返回摘要 ID"""
+    now = _now()
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "INSERT INTO session_summaries (session_id, start_msg_id, end_msg_id, "
+            "summary, token_count, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, start_msg_id, end_msg_id, summary, token_count, now),
+        )
+        await db.commit()
+        return cursor.lastrowid
+    finally:
+        await db.close()
+
+
+async def get_session_summaries(session_id: str) -> list[dict]:
+    """获取会话的所有摘要，按起始消息 ID 排序"""
+    db = await get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT * FROM session_summaries WHERE session_id = ? ORDER BY start_msg_id ASC",
+            (session_id,),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_dict(r) for r in rows]
+    finally:
+        await db.close()
