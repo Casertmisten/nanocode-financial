@@ -49,9 +49,8 @@ def _serialize_messages_for_summary(messages: list[dict]) -> str:
         content = msg.get("content") or ""
 
         if role == "tool":
-            # 工具返回结果：保留前 100 字摘要 + 占位符
-            brief = content[:100].replace("\n", " ").strip()
-            parts.append(f"[tool结果] {brief}...（如需完整数据可重新调用工具获取）")
+            # 工具返回结果直接用占位符替代
+            parts.append("[tool结果] （如需完整数据可重新调用工具获取）")
             continue
 
         if role == "assistant":
