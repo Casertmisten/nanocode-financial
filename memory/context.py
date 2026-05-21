@@ -38,13 +38,41 @@ def _count_rounds(messages: list[dict]) -> int:
 
 
 def _serialize_messages_for_summary(messages: list[dict]) -> str:
-    """将消息序列化为摘要 prompt 所需的文本格式。"""
+    """将消息序列化为摘要 prompt 所需的文本格式。
+
+    工具调用结果用占位符替代，避免大量原始数据进入摘要。
+    """
+    import json as _json
     parts = []
     for msg in messages:
         role = msg.get("role", "")
-        content = msg.get("content", "")
+        content = msg.get("content") or ""
+
         if role == "tool":
+            # 工具返回结果用占位符替代
+            parts.append("[tool结果] （如需相关数据可重新调用工具获取）")
             continue
+
+        if role == "assistant":
+            # 如果 assistant 消息包含 tool_calls，提取工具名列表
+            tool_calls_raw = msg.get("tool_calls")
+            tool_names = []
+            if tool_calls_raw:
+                try:
+                    tc_list = _json.loads(tool_calls_raw) if isinstance(tool_calls_raw, str) else tool_calls_raw
+                    for tc in tc_list:
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            tool_names.append(fn["name"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            text = content[:500] if content else ""
+            if tool_names:
+                text += f"\n[调用了工具: {', '.join(tool_names)}]"
+            if text:
+                parts.append(f"[{role}] {text}")
+            continue
+
         if not content:
             continue
         parts.append(f"[{role}] {content[:500]}")
