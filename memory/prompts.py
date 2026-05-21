@@ -1,0 +1,60 @@
+"""三层记忆系统相关 prompt 模板。"""
+
+# --- L2: 会话摘要生成（含 L1 画像候选提取）---
+SUMMARY_PROMPT = """你是一个对话摘要助手。请对以下对话进行摘要，要求：
+1. 提炼用户的核心问题和助手的回答要点
+2. 提取 3-5 个主题关键词，以 JSON 数组格式输出
+3. 摘要长度控制在 200 字以内
+4. 如果对话中暴露了用户的投资偏好、关注行业/个股、报告风格偏好，请额外列出
+
+输出格式（严格遵循）：
+<summary>
+摘要内容...
+</summary>
+<topics>
+["主题1", "主题2", "主题3"]
+</topics>
+<profile_candidates>
+{"focus_sectors": [], "watched_stocks": [], "preferred_markets": [], "risk_tolerance": "", "report_style": ""}
+</profile_candidates>
+
+对话内容：
+{messages}"""
+
+# --- L1: 画像候选合并 ---
+MERGE_PROFILE_PROMPT = """你是一个用户画像管理助手。
+
+以下是当前的用户画像：
+{current_profile}
+
+以下是近期对话中提取的用户偏好候选：
+{candidates}
+
+请合并以上信息，生成更新后的用户画像。规则：
+1. 新信息覆盖旧信息中的冲突字段
+2. 列表类字段（如关注行业、关注个股）取并集
+3. 如果候选中没有某字段的新信息，保留原值
+4. 严格保持 JSON 格式输出，只输出 JSON，不要其他内容
+
+输出格式：
+{{"preferred_markets": [], "focus_sectors": [], "watched_stocks": [], "risk_tolerance": "", "report_style": "", "language": "中文"}}"""
+
+# --- L1: 用户画像 Markdown 模板 ---
+PROFILE_TEMPLATE = """## 用户画像
+- 关注市场：{preferred_markets}
+- 关注行业：{focus_sectors}
+- 关注个股：{watched_stocks}
+- 风险偏好：{risk_tolerance}
+- 报告风格：{report_style}"""
+
+# --- L3: 对话压缩摘要 ---
+COMPRESS_PROMPT = """请将以下对话内容压缩为一段简洁的摘要，保留关键信息（用户意图、结论、重要数据点）。
+摘要长度控制在 150 字以内。只输出摘要文本，不要其他内容。
+
+对话内容：
+{messages}"""
+
+# --- L2: 跨会话记忆注入模板 ---
+CROSS_SESSION_TEMPLATE = """## 历史对话记忆
+以下是与你之前对话相关的记忆片段：
+{memory_items}"""
