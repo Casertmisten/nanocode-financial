@@ -5,15 +5,22 @@ import json
 import os
 import re
 import subprocess
+import rag as rag_module
 
 from utils import BaseLogger
+from datasource import stock
+import pandas as pd
+import db
+from datasource import news
+from tavily import TavilyClient
+from dotenv import dotenv_values
+
 
 log = BaseLogger.getLogger("tools")
 
 
-# --- Original tool implementations ---
 
-
+# --- 文件操作工具 ---
 def read(args):
     lines = open(args["path"]).readlines()
     offset = args.get("offset", 0)
@@ -90,12 +97,10 @@ def bash(args):
     return "".join(output_lines).strip() or "(empty)"
 
 
-# --- RAG tool implementations ---
-
+# --- RAG 工具实现 ---
 
 def rag_query_tool(args):
     """RAG 查询工具，用于查询知识库中的文档。仅在调用此工具时才触发查询改写。"""
-    import rag as rag_module
 
     question = args["question"]
     top_k = args.get("top_k", 5)
@@ -117,8 +122,7 @@ def rag_query_tool(args):
 
 def rag_ingest_tool(args):
     """RAG 导入工具，用于将文档导入知识库。"""
-    import rag as rag_module
-
+    
     doc_path = args.get("path") or None
     log.info("RAG 导入: path=%s", doc_path)
     count = rag_module.ingest(doc_path)
@@ -132,8 +136,7 @@ def rag_ingest_tool(args):
 
 def _fmt(data) -> str:
     """统一将数据源结果序列化为字符串。"""
-    import pandas as pd
-
+    
     if data is None:
         return "未获取到数据。"
     if isinstance(data, pd.DataFrame):
@@ -142,7 +145,8 @@ def _fmt(data) -> str:
 
 
 def stock_list_tool(args):
-    import db
+    """股票列表工具，用于根据名称查询股票代码，或者根据股票代码查询股票名称，或者返回所有股票列表。"""
+    
     keyword = args.get("keyword", "")
     try:
         stocks = db.get_cached_stock_list(keyword)
@@ -154,23 +158,23 @@ def stock_list_tool(args):
 
 
 def stock_basic_info_tool(args):
-    from datasource import stock
+    """个股基本信息工具，用于获取个股的公司名称、行业、市值等基本信息。参数code为股票代码，如600000。"""
     return _fmt(stock.get_stock_basic_info(args["code"]))
 
 
 def stock_quotes_tool(args):
-    from datasource import stock
+    """个股实时行情工具，用于获取个股的实时行情（最新价、涨跌幅、成交量等）。参数code为股票代码。"""
     return _fmt(stock.get_stock_quotes(args["code"]))
 
 
 def batch_stock_quotes_tool(args):
-    from datasource import stock
+    """批量获取个股实时行情工具，用于获取多个个股的实时行情（最新价、涨跌幅、成交量等）。参数codes为股票代码列表，如600000,600001。"""
     codes = [c.strip() for c in args["codes"].split(",") if c.strip()]
     return _fmt(stock.get_batch_stock_quotes(codes))
 
 
 def stock_historical_tool(args):
-    from datasource import stock
+    """获取个股历史K线数据。参数：code(股票代码)、start_date(起始日期YYYYMMDD)、end_date(结束日期YYYYMMDD)、period(周期: daily/weekly/monthly，可选)。"""
     return _fmt(stock.get_historical_data(
         args["code"], args["start_date"], args["end_date"],
         args.get("period", "daily"),
@@ -178,30 +182,27 @@ def stock_historical_tool(args):
 
 
 def stock_financial_tool(args):
-    from datasource import stock
+    """获取个股财务数据（利润表、资产负债表、现金流量表等）。参数code为股票代码。"""
     return _fmt(stock.get_financial_data(args["code"]))
 
 
 def market_status_tool(args):
-    from datasource import stock
+    """获取当前A股市场状态（开/闭市、交易时段等）。"""
     return _fmt(stock.get_market_status())
 
 
 def market_news_tool(args):
-    from datasource import news
+    """聚合采集最新A股市场新闻，来源于东方财富、新浪等多个财经网站。"""
     return _fmt(news.collect_market_news())
 
 
 def stock_news_tool(args):
-    from datasource import news
+    """获取个股相关新闻。参数symbol为股票代码，limit为返回条数(可选，默认10)"""
     return _fmt(news.get_stock_news(args["symbol"], args.get("limit", 10)))
 
 
 def web_search_tool(args):
     """使用 Tavily 搜索互联网信息。"""
-    from tavily import TavilyClient
-    from dotenv import dotenv_values
-    import db
 
     query = args["query"]
     max_results = args.get("max_results", 5)
@@ -282,7 +283,7 @@ TOOLS = {
     ),
     # --- 股票数据工具 ---
     "stock_list": (
-        "查询A股股票列表，支持按代码或名称关键词筛选。不传keyword返回前50条。",
+        "根据股票名称查询股票代码，或者根据股票代码查询股票名称",
         {"keyword": "string?"},
         stock_list_tool,
     ),

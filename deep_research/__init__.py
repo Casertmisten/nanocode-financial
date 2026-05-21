@@ -65,4 +65,17 @@ async def execute(query: str, sub_tasks: list[SubTask]) -> tuple[list[ExecutorRe
     report_id = await db.add_research_report(query, report, filepath)
     log.info("研究报告已保存: id=%d, path=%s", report_id, filepath)
 
+    # 保存到 L2 跨会话记忆
+    try:
+        from memory.session_memory import save_session_memory
+        topics = [query[:20]]
+        save_session_memory(
+            f"research_{report_id}",
+            report[:1000],
+            topics,
+            session_type="deep_research",
+        )
+    except Exception:
+        log.warning("Deep Research 报告保存到跨会话记忆失败", exc_info=True)
+
     return results_list, report, report_id, filepath
