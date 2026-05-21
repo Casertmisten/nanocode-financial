@@ -40,7 +40,7 @@ def _count_rounds(messages: list[dict]) -> int:
 def _serialize_messages_for_summary(messages: list[dict]) -> str:
     """将消息序列化为摘要 prompt 所需的文本格式。
 
-    工具调用结果用占位符替代，避免大量原始数据进入摘要。
+    保留工具调用轨迹（工具名+参数），仅用占位符替代工具返回的大段结果。
     """
     import json as _json
     parts = []
@@ -49,26 +49,34 @@ def _serialize_messages_for_summary(messages: list[dict]) -> str:
         content = msg.get("content") or ""
 
         if role == "tool":
-            # 工具返回结果用占位符替代
-            parts.append("[tool结果] （如需相关数据可重新调用工具获取）")
+            # 工具返回结果：保留前 100 字摘要 + 占位符
+            brief = content[:100].replace("\n", " ").strip()
+            parts.append(f"[tool结果] {brief}...（如需完整数据可重新调用工具获取）")
             continue
 
         if role == "assistant":
-            # 如果 assistant 消息包含 tool_calls，提取工具名列表
             tool_calls_raw = msg.get("tool_calls")
-            tool_names = []
+            call_lines = []
             if tool_calls_raw:
                 try:
                     tc_list = _json.loads(tool_calls_raw) if isinstance(tool_calls_raw, str) else tool_calls_raw
                     for tc in tc_list:
                         fn = tc.get("function", {})
-                        if fn.get("name"):
-                            tool_names.append(fn["name"])
-                except (json.JSONDecodeError, TypeError):
+                        name = fn.get("name", "")
+                        args_str = fn.get("arguments", "{}")
+                        if name:
+                            try:
+                                args = _json.loads(args_str) if isinstance(args_str, str) else args_str
+                                # 只取每个参数的前 50 字
+                                short_args = {k: str(v)[:50] for k, v in args.items()}
+                                call_lines.append(f"  → {name}({', '.join(f'{k}={v}' for k, v in short_args.items())})")
+                            except (_json.JSONDecodeError, TypeError):
+                                call_lines.append(f"  → {name}(...)")
+                except (_json.JSONDecodeError, TypeError):
                     pass
             text = content[:500] if content else ""
-            if tool_names:
-                text += f"\n[调用了工具: {', '.join(tool_names)}]"
+            if call_lines:
+                text += "\n[工具调用]\n" + "\n".join(call_lines)
             if text:
                 parts.append(f"[{role}] {text}")
             continue
