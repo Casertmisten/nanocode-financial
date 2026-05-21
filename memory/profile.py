@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import config
 import llm
-from memory.prompts import MERGE_PROFILE_PROMPT, PROFILE_TEMPLATE
+from memory.prompts import MERGE_PROFILE_PROMPT
 from utils import BaseLogger
 
 log = BaseLogger.getLogger("memory.profile")
@@ -39,8 +39,7 @@ def render_profile_markdown(profile: dict | None) -> str:
     """将用户画像渲染为 Markdown 片段。画像为空时返回空字符串。"""
     if not profile:
         return ""
-    # 过滤掉空值字段
-    values = {}
+    lines = ["## 用户画像"]
     for key, label in [
         ("preferred_markets", "关注市场"),
         ("focus_sectors", "关注行业"),
@@ -51,12 +50,13 @@ def render_profile_markdown(profile: dict | None) -> str:
         val = profile.get(key)
         if val and val != [] and val != "":
             if isinstance(val, list):
-                values[label] = "、".join(str(v) for v in val)
+                display = "、".join(str(v) for v in val)
             else:
-                values[label] = str(val)
-    if not values:
+                display = str(val)
+            lines.append(f"- {label}：{display}")
+    if len(lines) == 1:
         return ""
-    return PROFILE_TEMPLATE.format(**values)
+    return "\n".join(lines)
 
 
 def add_candidate(session_id: str, fields: dict):

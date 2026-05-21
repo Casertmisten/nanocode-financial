@@ -716,7 +716,7 @@ def get_web_search_cache(query: str, limit: int = 5) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 async def add_session_summary(session_id: str, start_msg_id: int, end_msg_id: int,
-                               summary: str, token_count: int = 0) -> int:
+                               summary: str, token_count: int = 0) -> int | None:
     """添加会话摘要，返回摘要 ID"""
     now = _now()
     db = await get_db()

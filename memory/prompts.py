@@ -41,11 +41,11 @@ MERGE_PROFILE_PROMPT = """你是一个用户画像管理助手。
 
 # --- L1: 用户画像 Markdown 模板 ---
 PROFILE_TEMPLATE = """## 用户画像
-- 关注市场：{preferred_markets}
-- 关注行业：{focus_sectors}
-- 关注个股：{watched_stocks}
-- 风险偏好：{risk_tolerance}
-- 报告风格：{report_style}"""
+- 关注市场：{关注市场}
+- 关注行业：{关注行业}
+- 关注个股：{关注个股}
+- 风险偏好：{风险偏好}
+- 报告风格：{报告风格}"""
 
 # --- L3: 对话压缩摘要 ---
 COMPRESS_PROMPT = """请将以下对话内容压缩为一段简洁的摘要，保留关键信息（用户意图、结论、重要数据点）。
