@@ -104,7 +104,7 @@ async def _agentic_loop(
     """异步 agentic loop，yield (event_type, data) 元组。"""
     tools_schema = tools.make_schema()
     llm_messages = list(messages)
-    max_turns = 10  # 最大轮数，防止死循环
+    max_turns = config.AGENT_MAX_TURNS
     _sys = system_prompt or SYSTEM_PROMPT
 
     for turn in range(max_turns):
@@ -144,6 +144,20 @@ async def _agentic_loop(
                         entry["function"]["name"] = fn["name"]
                     if fn.get("arguments"):
                         entry["function"]["arguments"] += fn["arguments"]
+
+        # 流式结束后若 usage 为空，用字符数估算兜底
+        if not usage_turn.get("total_tokens"):
+            from memory.context import estimate_tokens
+            estimated = estimate_tokens(llm_messages)
+            output_chars = sum(len(c) for c in content_parts)
+            for tc in tool_calls_map.values():
+                output_chars += len(tc.get("function", {}).get("arguments", ""))
+            est_output = int(output_chars / 2.0) or 1
+            usage_turn.update({
+                "prompt_tokens": estimated,
+                "completion_tokens": est_output,
+                "total_tokens": estimated + est_output,
+            })
 
         if not tool_calls_map:
             await _record_token_usage(usage_turn, model, session_id)

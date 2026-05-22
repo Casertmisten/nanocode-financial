@@ -15,7 +15,7 @@ _HEADERS = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {config.API_KEY}",
 }
-_TIMEOUT = 120.0
+_TIMEOUT = float(config.LLM_TIMEOUT)
 
 
 def _build_body(
@@ -29,12 +29,14 @@ def _build_body(
     all_messages = [{"role": "system", "content": system_prompt}] + messages
     body: dict = {
         "model": model or config.MODEL,
-        "max_tokens": 8192,
+        "max_tokens": config.LLM_MAX_TOKENS,
         "messages": all_messages,
         "stream": stream,
     }
     if tools is not None:
         body["tools"] = tools
+    if stream:
+        body["stream_options"] = {"include_usage": True}
     return body
 
 

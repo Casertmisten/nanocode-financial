@@ -10,6 +10,12 @@ dotenv.load_dotenv()
 API_URL = os.environ.get("ALI_API_URL", "")
 API_KEY = os.environ.get("ALI_API_KEY", "")
 MODEL = os.environ.get("ALI_MODEL", "deepseek-v4-flash")
+LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "8192"))
+LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "120"))
+
+# --- Agentic Loop ---
+AGENT_MAX_TURNS = int(os.environ.get("AGENT_MAX_TURNS", "10"))
+TOOL_BATCH_SIZE = int(os.environ.get("TOOL_BATCH_SIZE", "5"))
 
 # --- Embedding API ---
 EMBEDDING_API_URL = os.environ.get(
