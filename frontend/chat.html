@@ -1367,24 +1367,26 @@
         for (const m of (data.messages || [])) {
           messages.push({ role: m.role, content: m.content, time: new Date(m.created_at), tool_calls_str: m.tool_calls });
         }
-        // 将 tool 消息聚合到前一条 assistant 消息的 toolCalls 上
+        // 合并 agentic loop 产生的 assistant→tool→assistant 序列
+        // 数据库中的序列：assistant(空,tool_calls) → tool → tool → assistant(最终文本)
+        // 需要合并为：assistant(最终文本, toolCalls=[...])
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
-          if (msg.role !== 'assistant') continue;
+          if (msg.role !== 'assistant' || !msg.tool_calls_str) continue;
+
+          // 解析 tool_calls
           const toolCalls = [];
-          // 如果 assistant 消息自身有 tool_calls，解析出来
-          if (msg.tool_calls_str) {
-            try {
-              const tcList = typeof msg.tool_calls_str === 'string'
-                ? JSON.parse(msg.tool_calls_str) : msg.tool_calls_str;
-              tcList.forEach(tc => {
-                const args = {};
-                try { Object.assign(args, JSON.parse(tc.function.arguments)); } catch {}
-                toolCalls.push({ tool: tc.function.name, args, result: null, done: false });
-              });
-            } catch {}
-          }
-          // 紧跟其后的 tool 消息作为结果填充
+          try {
+            const tcList = typeof msg.tool_calls_str === 'string'
+              ? JSON.parse(msg.tool_calls_str) : msg.tool_calls_str;
+            tcList.forEach(tc => {
+              const args = {};
+              try { Object.assign(args, JSON.parse(tc.function.arguments)); } catch {}
+              toolCalls.push({ tool: tc.function.name, args, result: null, done: false });
+            });
+          } catch {}
+
+          // 紧跟的 tool 消息填充结果
           let j = i + 1;
           let tcIdx = 0;
           while (j < messages.length && messages[j].role === 'tool') {
@@ -1395,10 +1397,20 @@
             tcIdx++;
             j++;
           }
+
+          // 查找 tool 消息之后紧跟的 assistant 消息（最终回复），合并内容
+          if (j < messages.length && messages[j].role === 'assistant' && messages[j].content) {
+            msg.content = messages[j].content;
+            msg.time = messages[j].time;
+            messages.splice(j, 1); // 移除被合并的 assistant 消息
+          }
+
           if (toolCalls.length > 0) {
             msg.toolCalls = toolCalls;
           }
         }
+        // 过滤掉 tool 消息和空内容的中间 assistant 消息
+        messages = messages.filter(m => m.role !== 'tool');
         renderMessages();
         scrollToBottom();
 
