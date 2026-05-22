@@ -14,6 +14,7 @@ import tools
 from prompts.main_prompts import system_prompt as _SYSTEM_PROMPT_TEMPLATE
 from utils import BaseLogger
 import memory as memory_module
+import asyncio
 
 log = BaseLogger.getLogger("chat")
 
@@ -37,15 +38,20 @@ def _sse(event: str, data: dict) -> str:
 
 
 def _messages_to_llm_format(messages: list[dict]) -> list[dict]:
-    """将数据库消息转换为 LLM API 格式，去掉 _session_id 等内部字段。"""
+    """将数据库消息转换为 LLM API 格式，保留完整的 tool_calls / tool 消息链。"""
     result = []
     for msg in messages:
         role = msg["role"]
         content = msg["content"]
+
         if role == "tool":
+            call_id = msg.get("tool_call_id")
+            if call_id:
+                result.append({"role": "tool", "tool_call_id": call_id, "content": content})
             continue
+
         entry: dict = {"role": role, "content": content}
-        if msg.get("tool_calls"):
+        if role == "assistant" and msg.get("tool_calls"):
             try:
                 tc_list = json.loads(msg["tool_calls"]) if isinstance(msg["tool_calls"], str) else msg["tool_calls"]
                 entry["tool_calls"] = tc_list
@@ -57,34 +63,59 @@ def _messages_to_llm_format(messages: list[dict]) -> list[dict]:
     return result
 
 
+async def _record_token_usage(usage: dict, model: str | None, session_id: str | None):
+    """记录一轮 token 用量。"""
+    if not usage.get("total_tokens"):
+        return
+    try:
+        await db.add_token_usage(
+            model=model or config.MODEL,
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            total_tokens=usage.get("total_tokens", 0),
+            source="chat",
+            session_id=session_id,
+        )
+    except Exception as e:
+        log.warning("记录 token 用量失败: %s", e)
+
+
+async def _build_system_prompt(memory_injection: str | None = None) -> str:
+    """构建完整系统提示词：替换文档列表 + 追加记忆。"""
+    prompt = SYSTEM_PROMPT
+    try:
+        docs = await db.list_documents(status="ready")
+        doc_lines = "\n".join(f"- {d['title']} ({d['file_type']})" for d in docs) if docs else "（知识库为空，暂无文档）"
+    except Exception:
+        doc_lines = "（知识库为空，暂无文档）"
+    prompt = prompt.replace("{documents}", doc_lines)
+    if memory_injection:
+        prompt += "\n\n" + memory_injection
+    return prompt
+
+
 async def _agentic_loop(
     messages: list[dict],
     model: str | None,
     doc_filepaths: list[str] | None = None,
     session_id: str | None = None,
     system_prompt: str | None = None,
-) -> AsyncIterator[str]:
-    """异步 agentic loop，yield SSE 事件字符串。"""
+) -> AsyncIterator[tuple[str, dict]]:
+    """异步 agentic loop，yield (event_type, data) 元组。"""
     tools_schema = tools.make_schema()
     llm_messages = list(messages)
-    max_turns = 20 # 最大轮数，防止死循环
+    max_turns = 10  # 最大轮数，防止死循环
     _sys = system_prompt or SYSTEM_PROMPT
 
     for turn in range(max_turns):
-        content_parts: list[str] = [] # 本轮对话内容
-        tool_calls_map: dict[int, dict] = {}  # index -> {id, name, arguments}
+        content_parts: list[str] = []
+        tool_calls_map: dict[int, dict] = {}
         usage_turn: dict = {}
 
         async for chunk in llm.async_stream_chat(
             llm_messages, _sys, tools=tools_schema, model=model,
             usage_out=usage_turn,
-        ):  
-            # 流式推送返回
-            # {
-            #   "choices": [{
-            #     "delta": {"content": "Python"}
-            #   }]
-            # }
+        ):
             choices = chunk.get("choices", [])
             if not choices:
                 continue
@@ -93,7 +124,7 @@ async def _agentic_loop(
             text = delta.get("content")
             if text:
                 content_parts.append(text)
-                yield _sse("token", {"content": text})
+                yield ("token", {"content": text})
 
             tc_deltas = delta.get("tool_calls")
             if tc_deltas:
@@ -115,19 +146,16 @@ async def _agentic_loop(
                         entry["function"]["arguments"] += fn["arguments"]
 
         if not tool_calls_map:
-            # 记录本轮 token 用量
-            if usage_turn.get("total_tokens"):
+            await _record_token_usage(usage_turn, model, session_id)
+            # 保存最终 assistant 消息（纯文本）
+            final_msg_id = None
+            if session_id:
                 try:
-                    await db.add_token_usage(
-                        model=model or config.MODEL,
-                        prompt_tokens=usage_turn.get("prompt_tokens", 0),
-                        completion_tokens=usage_turn.get("completion_tokens", 0),
-                        total_tokens=usage_turn.get("total_tokens", 0),
-                        source="chat",
-                        session_id=session_id,
-                    )
+                    final_msg_id = await db.add_message(
+                        session_id, "assistant", "".join(content_parts))
                 except Exception as e:
-                    log.warning("记录 token 用量失败: %s", e)
+                    log.warning("保存最终 assistant 消息失败: %s", e)
+            yield ("final", {"message_id": final_msg_id})
             break
 
         assistant_msg: dict = {
@@ -136,6 +164,19 @@ async def _agentic_loop(
             "tool_calls": [tool_calls_map[i] for i in sorted(tool_calls_map)],
         }
         llm_messages.append(assistant_msg)
+
+        # 模型未输出文本就直接调用工具，通知客户端
+        if not content_parts:
+            yield ("status", {"message": "正在调用工具..."})
+
+        # 增量保存：assistant 消息（含 tool_calls）
+        if session_id:
+            try:
+                tc_json = json.dumps(assistant_msg["tool_calls"], ensure_ascii=False)
+                await db.add_message(session_id, "assistant", assistant_msg["content"] or "",
+                                     tool_calls=tc_json)
+            except Exception as e:
+                log.warning("保存中间 assistant 消息失败: %s", e)
 
         for idx in sorted(tool_calls_map):
             tc = tool_calls_map[idx]
@@ -151,12 +192,17 @@ async def _agentic_loop(
             if tool_name == "rag_query" and doc_filepaths:
                 tool_args["file_paths"] = doc_filepaths
 
-            yield _sse("tool_start", {"tool": tool_name, "args": tool_args})
+            yield ("tool_start", {"tool": tool_name, "args": tool_args})
 
-            tool_result = tools.run_tool(tool_name, tool_args)
+            try:
+                tool_result = await asyncio.to_thread(tools.run_tool, tool_name, tool_args)
+            except Exception as e:
+                log.warning("工具执行失败 [%s]: %s", tool_name, e)
+                tool_result = f"工具执行失败: {e}"
+
             log.info("工具结果 [%s]: %s", tool_name, str(tool_result)[:200])
 
-            yield _sse("tool_end", {"tool": tool_name, "result": tool_result})
+            yield ("tool_end", {"tool": tool_name, "result": tool_result})
 
             llm_messages.append({
                 "role": "tool",
@@ -164,22 +210,19 @@ async def _agentic_loop(
                 "content": str(tool_result),
             })
 
+            # 增量保存：tool 结果
+            if session_id:
+                try:
+                    await db.add_message(session_id, "tool", str(tool_result),
+                                         tool_call_id=tc["id"])
+                except Exception as e:
+                    log.warning("保存 tool 消息失败: %s", e)
+
+        await _record_token_usage(usage_turn, model, session_id)
+
         if turn == max_turns - 1:
             log.warning("agentic loop 达到最大轮次 %d", max_turns)
-
-        # 记录本轮（有工具调用）的 token 用量
-        if usage_turn.get("total_tokens"):
-            try:
-                await db.add_token_usage(
-                    model=model or config.MODEL,
-                    prompt_tokens=usage_turn.get("prompt_tokens", 0),
-                    completion_tokens=usage_turn.get("completion_tokens", 0),
-                    total_tokens=usage_turn.get("total_tokens", 0),
-                    source="chat",
-                    session_id=session_id,
-                )
-            except Exception as e:
-                log.warning("记录 token 用量失败: %s", e)
+            yield ("final", {"message_id": None})
 
 
 @router.post("/chat")
@@ -221,72 +264,34 @@ async def chat(req: ChatRequest):
             doc_filepaths = None
 
     async def stream():
-        full_content: list[str] = []
+        message_id = None
+        turn_system_prompt = await _build_system_prompt(memory_injection)
 
-        # 注入知识库文档列表到系统提示词
-        turn_system_prompt = SYSTEM_PROMPT
-        try:
-            docs = await db.list_documents(status="ready")
-            if docs:
-                doc_lines = "\n".join(f"- {d['title']} ({d['file_type']})" for d in docs)
-            else:
-                doc_lines = "（知识库为空，暂无文档）"
-            turn_system_prompt = SYSTEM_PROMPT.replace("{documents}", doc_lines)
-        except Exception:
-            turn_system_prompt = SYSTEM_PROMPT.replace("{documents}", "（知识库为空，暂无文档）")
-
-        # 追加三层记忆到 system prompt
-        if memory_injection:
-            turn_system_prompt = turn_system_prompt + "\n\n" + memory_injection
-
-        async for sse_str in _agentic_loop(
+        async for event_type, data in _agentic_loop(
             llm_messages, req.model, doc_filepaths, req.session_id,
             system_prompt=turn_system_prompt,
         ):
-            # 解析事件类型
-            lines = sse_str.strip().split("\n")
-            event_type = lines[0].replace("event: ", "")
-            data_str = lines[1].replace("data: ", "", 1)
-            data = json.loads(data_str)
+            if event_type == "final":
+                message_id = data.get("message_id")
+                continue
+            yield _sse(event_type, data)
 
-            if event_type == "token":
-                full_content.append(data["content"])
-                yield sse_str
-            elif event_type == "tool_start":
-                yield sse_str
-            elif event_type == "tool_end":
-                yield sse_str
-            elif event_type == "done":
-                yield sse_str
-
-        # agentic loop 结束，保存 assistant 消息到数据库
-        content = "".join(full_content)
-        # 从 llm_messages 的最后状态获取 tool_calls 信息
-        # 查找最后一条 assistant 消息中的 tool_calls
-        saved_tool_calls = None
-        for msg in reversed(llm_messages):
-            if msg.get("role") == "assistant" and msg.get("tool_calls"):
-                saved_tool_calls = json.dumps(msg["tool_calls"], ensure_ascii=False)
-                break
-
-        message_id = await db.add_message(
-            req.session_id, "assistant", content,
-            tool_calls=saved_tool_calls,
-        )
-
-        log.info("对话完成: session=%s, message_id=%d, 回复长度=%d", req.session_id, message_id, len(content))
+        log.info("对话完成: session=%s, message_id=%s", req.session_id, message_id)
 
         # 保存三层记忆（异步后台执行，不阻塞响应）
-        import asyncio
         try:
             all_session_msgs = await db.get_messages(req.session_id)
-            asyncio.create_task(
-                memory_module.save_after_turn(req.session_id, all_session_msgs)
-            )
+
+            async def _safe_save():
+                try:
+                    await memory_module.save_after_turn(req.session_id, all_session_msgs)
+                except Exception:
+                    log.warning("记忆保存失败", exc_info=True)
+
+            asyncio.create_task(_safe_save())
         except Exception:
             log.warning("触发记忆保存失败", exc_info=True)
 
-        # 发送完成事件
         yield _sse("done", {"message_id": message_id})
 
     return StreamingResponse(stream(), media_type="text/event-stream")
