@@ -1,8 +1,11 @@
-"""SQLite 数据库初始化 + CRUD 层（异步，基于 aiosqlite）"""
+"""SQLite 数据库初始化 + CRUD 层（异步，基于 aiosqlite 连接池）"""
 
+import asyncio
 import json
 import sqlite3
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import AsyncGenerator
 
 import aiosqlite
 
@@ -20,22 +23,99 @@ def _now() -> str:
 
 
 # ---------------------------------------------------------------------------
-# 数据库连接与初始化
+# 连接池
 # ---------------------------------------------------------------------------
 
-async def get_db() -> aiosqlite.Connection:
-    """获取数据库连接，开启 WAL 模式和外键约束"""
-    db = await aiosqlite.connect(DB_PATH)
-    db.row_factory = aiosqlite.Row
-    await db.execute("PRAGMA journal_mode=WAL")
-    await db.execute("PRAGMA foreign_keys=ON")
-    return db
+class _DatabasePool:
+    """SQLite 异步连接池"""
 
+    def __init__(self, db_path: str, pool_size: int = 5):
+        self._db_path = db_path
+        self._pool_size = pool_size
+        self._pool: asyncio.Queue[aiosqlite.Connection] | None = None
+
+    async def initialize(self):
+        if self._pool is not None:
+            return
+        self._pool = asyncio.Queue(maxsize=self._pool_size)
+        for _ in range(self._pool_size):
+            await self._pool.put(await self._new_conn())
+        log.info("连接池初始化完成，大小=%d", self._pool_size)
+
+    async def _new_conn(self) -> aiosqlite.Connection:
+        db = await aiosqlite.connect(self._db_path)
+        db.row_factory = aiosqlite.Row
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA foreign_keys=ON")
+        return db
+
+    @asynccontextmanager
+    async def acquire(self) -> AsyncGenerator[aiosqlite.Connection, None]:
+        conn = await self._pool.get()
+        try:
+            yield conn
+        except Exception:
+            try:
+                await conn.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            # 归还连接；若已断开则新建替换
+            try:
+                await conn.execute("SELECT 1")
+                self._pool.put_nowait(conn)
+            except Exception:
+                self._pool.put_nowait(await self._new_conn())
+
+    async def close(self):
+        if self._pool is None:
+            return
+        while not self._pool.empty():
+            try:
+                conn = self._pool.get_nowait()
+                await conn.close()
+            except asyncio.QueueEmpty:
+                break
+        self._pool = None
+        log.info("连接池已关闭")
+
+
+_pool: _DatabasePool | None = None
+
+
+async def _get_pool() -> _DatabasePool:
+    global _pool
+    if _pool is None:
+        _pool = _DatabasePool(DB_PATH)
+        await _pool.initialize()
+    return _pool
+
+
+@asynccontextmanager
+async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
+    """从连接池获取数据库连接（上下文管理器）"""
+    pool = await _get_pool()
+    async with pool.acquire() as db:
+        yield db
+
+
+async def close_db_pool():
+    """关闭连接池，应用退出时调用"""
+    global _pool
+    if _pool:
+        await _pool.close()
+        _pool = None
+
+
+# ---------------------------------------------------------------------------
+# 数据库初始化
+# ---------------------------------------------------------------------------
 
 async def init_db():
-    """创建所有表（如果不存在）"""
-    db = await get_db()
-    try:
+    """创建所有表（如果不存在）并初始化连接池"""
+    pool = await _get_pool()
+    async with pool.acquire() as db:
         await db.executescript("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
@@ -151,11 +231,9 @@ async def init_db():
             await db.execute("ALTER TABLE messages ADD COLUMN tool_call_id TEXT")
             await db.commit()
         except Exception:
-            pass  # 列已存在，忽略
+            pass
 
         log.info("数据库初始化完成: %s", DB_PATH)
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -173,8 +251,7 @@ def _row_to_dict(row: aiosqlite.Row) -> dict:
 async def create_session(session_id: str, title: str = "新对话", model: str = "") -> dict:
     """创建新会话，返回会话字典"""
     now = _now()
-    db = await get_db()
-    try:
+    async with get_db() as db:
         await db.execute(
             "INSERT INTO sessions (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
             (session_id, title, model, now, now),
@@ -183,32 +260,24 @@ async def create_session(session_id: str, title: str = "新对话", model: str =
         log.info("创建会话: %s", session_id)
         return {"id": session_id, "title": title, "model": model,
                 "knowledge_base_ids": "[]", "created_at": now, "updated_at": now}
-    finally:
-        await db.close()
 
 
 async def list_sessions(limit: int = 50) -> list[dict]:
     """获取会话列表，按更新时间倒序"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?", (limit,)
         )
         rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
-    finally:
-        await db.close()
 
 
 async def get_session(session_id: str) -> dict | None:
     """获取单个会话"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute("SELECT * FROM sessions WHERE id = ?", (session_id,))
         row = await cursor.fetchone()
         return _row_to_dict(row) if row else None
-    finally:
-        await db.close()
 
 
 async def update_session(session_id: str, **fields) -> bool:
@@ -218,25 +287,19 @@ async def update_session(session_id: str, **fields) -> bool:
     fields["updated_at"] = _now()
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [session_id]
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(f"UPDATE sessions SET {set_clause} WHERE id = ?", values)
         await db.commit()
         return cursor.rowcount > 0
-    finally:
-        await db.close()
 
 
 async def delete_session(session_id: str) -> bool:
     """删除会话（级联删除消息）"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         await db.commit()
         log.info("删除会话: %s, 影响=%d 行", session_id, cursor.rowcount)
         return cursor.rowcount > 0
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +312,7 @@ async def add_message(session_id: str, role: str, content: str,
                       tool_result: str | None = None) -> int:
     """添加消息，返回消息 ID"""
     now = _now()
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, tool_result, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -258,22 +320,17 @@ async def add_message(session_id: str, role: str, content: str,
         )
         await db.commit()
         return cursor.lastrowid
-    finally:
-        await db.close()
 
 
 async def get_messages(session_id: str, limit: int = 100) -> list[dict]:
     """获取会话消息，按创建时间正序"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC LIMIT ?",
             (session_id, limit),
         )
         rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -287,8 +344,7 @@ async def add_document(title: str, filename: str, filepath: str,
     now = _now()
     if tags is None:
         tags = "[]"
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "INSERT INTO documents (title, filename, filepath, file_size, file_type, source, "
             "tags, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -296,8 +352,6 @@ async def add_document(title: str, filename: str, filepath: str,
         )
         await db.commit()
         return cursor.lastrowid
-    finally:
-        await db.close()
 
 
 async def list_documents(status: str | None = None,
@@ -313,26 +367,20 @@ async def list_documents(status: str | None = None,
         conditions.append("file_type = ?")
         params.append(file_type)
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             f"SELECT * FROM documents {where} ORDER BY created_at DESC LIMIT ?", params + [limit]
         )
         rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
-    finally:
-        await db.close()
 
 
 async def get_document(doc_id: int) -> dict | None:
     """获取单个文档"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute("SELECT * FROM documents WHERE id = ?", (doc_id,))
         row = await cursor.fetchone()
         return _row_to_dict(row) if row else None
-    finally:
-        await db.close()
 
 
 def get_document_titles() -> list[dict]:
@@ -355,30 +403,23 @@ async def update_document(doc_id: int, **fields) -> bool:
     fields["updated_at"] = _now()
     set_clause = ", ".join(f"{k} = ?" for k in fields)
     values = list(fields.values()) + [doc_id]
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(f"UPDATE documents SET {set_clause} WHERE id = ?", values)
         await db.commit()
         return cursor.rowcount > 0
-    finally:
-        await db.close()
 
 
 async def delete_document(doc_id: int) -> bool:
     """删除文档记录"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
         await db.commit()
         return cursor.rowcount > 0
-    finally:
-        await db.close()
 
 
 async def get_document_stats() -> dict:
     """获取文档统计信息"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT status, COUNT(*) as count FROM documents GROUP BY status"
         )
@@ -392,8 +433,6 @@ async def get_document_stats() -> dict:
         row = await cursor.fetchone()
         stats["total"] = _row_to_dict(row)["total"]
         return stats
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -402,8 +441,7 @@ async def get_document_stats() -> dict:
 
 async def get_settings() -> dict:
     """获取所有设置项，value 从 JSON 反序列化"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute("SELECT key, value FROM settings")
         rows = await cursor.fetchall()
         result = {}
@@ -414,15 +452,12 @@ async def get_settings() -> dict:
             except (json.JSONDecodeError, TypeError):
                 result[d["key"]] = d["value"]
         return result
-    finally:
-        await db.close()
 
 
 async def save_settings(data: dict):
     """保存设置项，value 序列化为 JSON"""
     now = _now()
-    db = await get_db()
-    try:
+    async with get_db() as db:
         for key, value in data.items():
             await db.execute(
                 "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
@@ -430,8 +465,6 @@ async def save_settings(data: dict):
                 (key, json.dumps(value, ensure_ascii=False), now),
             )
         await db.commit()
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -442,8 +475,7 @@ async def add_fra_report(query: str, content: str, filepath: str,
                          session_id: str | None = None) -> int:
     """添加 FRA 报告，返回报告 ID"""
     now = _now()
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "INSERT INTO fra_reports (session_id, query, content, filepath, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
@@ -451,33 +483,25 @@ async def add_fra_report(query: str, content: str, filepath: str,
         )
         await db.commit()
         return cursor.lastrowid
-    finally:
-        await db.close()
 
 
 async def list_fra_reports(limit: int = 20) -> list[dict]:
     """获取 FRA 报告列表"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT id, session_id, query, filepath, created_at FROM fra_reports "
             "ORDER BY created_at DESC LIMIT ?", (limit,),
         )
         rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
-    finally:
-        await db.close()
 
 
 async def get_fra_report(report_id: int) -> dict | None:
     """获取单个 FRA 报告"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute("SELECT * FROM fra_reports WHERE id = ?", (report_id,))
         row = await cursor.fetchone()
         return _row_to_dict(row) if row else None
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -501,8 +525,7 @@ async def sync_stock_list():
         return 0
 
     now = _now()
-    db = await get_db()
-    try:
+    async with get_db() as db:
         await db.execute("DELETE FROM stock_list")
         await db.executemany(
             "INSERT INTO stock_list (code, name, market, updated_at) VALUES (?, ?, ?, ?)",
@@ -514,8 +537,6 @@ async def sync_stock_list():
         await db.commit()
         log.info("股票列表同步完成: %d 条", len(stocks))
         return len(stocks)
-    finally:
-        await db.close()
 
 
 def get_cached_stock_list(keyword: str = "", limit: int = 50) -> list[dict]:
@@ -546,8 +567,7 @@ async def add_research_report(query: str, content: str, filepath: str,
                                session_id: str | None = None) -> int:
     """添加研究报告，返回报告 ID"""
     now = _now()
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "INSERT INTO research_reports (session_id, query, content, filepath, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
@@ -555,33 +575,25 @@ async def add_research_report(query: str, content: str, filepath: str,
         )
         await db.commit()
         return cursor.lastrowid
-    finally:
-        await db.close()
 
 
 async def list_research_reports(limit: int = 20) -> list[dict]:
     """获取研究报告列表"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT id, session_id, query, filepath, created_at FROM research_reports "
             "ORDER BY created_at DESC LIMIT ?", (limit,),
         )
         rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
-    finally:
-        await db.close()
 
 
 async def get_research_report(report_id: int) -> dict | None:
     """获取单个研究报告"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute("SELECT * FROM research_reports WHERE id = ?", (report_id,))
         row = await cursor.fetchone()
         return _row_to_dict(row) if row else None
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -597,8 +609,7 @@ async def add_token_usage(
     session_id: str | None = None,
 ) -> int:
     """记录一次 LLM 调用的 token 用量，返回插入行 id"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "INSERT INTO token_usage (session_id, model, prompt_tokens, completion_tokens, "
             "total_tokens, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -606,14 +617,11 @@ async def add_token_usage(
         )
         await db.commit()
         return cursor.lastrowid
-    finally:
-        await db.close()
 
 
 async def get_token_summary(days: int = 30) -> dict:
     """获取 token 用量汇总统计"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         # 总计
         cursor = await db.execute(
             "SELECT COALESCE(SUM(prompt_tokens), 0) as total_prompt, "
@@ -651,14 +659,11 @@ async def get_token_summary(days: int = 30) -> dict:
             "by_source": by_source,
             "days": days,
         }
-    finally:
-        await db.close()
 
 
 async def get_token_daily(days: int = 30) -> list[dict]:
     """获取按天的 token 用量趋势"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT DATE(created_at) as date, "
             "SUM(prompt_tokens) as prompt_tokens, "
@@ -669,14 +674,11 @@ async def get_token_daily(days: int = 30) -> list[dict]:
             (f"-{days} days",),
         )
         return [_row_to_dict(r) for r in await cursor.fetchall()]
-    finally:
-        await db.close()
 
 
 async def get_token_recent(limit: int = 50) -> list[dict]:
     """获取最近的 token 用量明细"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT id, session_id, model, prompt_tokens, completion_tokens, "
             "total_tokens, source, created_at FROM token_usage "
@@ -684,8 +686,6 @@ async def get_token_recent(limit: int = 50) -> list[dict]:
             (limit,),
         )
         return [_row_to_dict(r) for r in await cursor.fetchall()]
-    finally:
-        await db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -729,8 +729,7 @@ async def add_session_summary(session_id: str, start_msg_id: int, end_msg_id: in
                                summary: str, token_count: int = 0) -> int | None:
     """添加会话摘要，返回摘要 ID"""
     now = _now()
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "INSERT INTO session_summaries (session_id, start_msg_id, end_msg_id, "
             "summary, token_count, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -738,19 +737,14 @@ async def add_session_summary(session_id: str, start_msg_id: int, end_msg_id: in
         )
         await db.commit()
         return cursor.lastrowid
-    finally:
-        await db.close()
 
 
 async def get_session_summaries(session_id: str) -> list[dict]:
     """获取会话的所有摘要，按起始消息 ID 排序"""
-    db = await get_db()
-    try:
+    async with get_db() as db:
         cursor = await db.execute(
             "SELECT * FROM session_summaries WHERE session_id = ? ORDER BY start_msg_id ASC",
             (session_id,),
         )
         rows = await cursor.fetchall()
         return [_row_to_dict(r) for r in rows]
-    finally:
-        await db.close()

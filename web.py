@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
     if _SYNC_STOCKS:
         asyncio.create_task(_sync_stocks())
     yield
+    await db.close_db_pool()
 
 
 app = FastAPI(title="FinAssist", version="0.1.0", lifespan=lifespan)
