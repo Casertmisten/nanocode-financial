@@ -52,6 +52,7 @@ async def init_db():
                 role TEXT NOT NULL CHECK(role IN ('user','assistant','system','tool')),
                 content TEXT NOT NULL DEFAULT '',
                 tool_calls TEXT,
+                tool_call_id TEXT,
                 tool_result TEXT,
                 created_at TEXT NOT NULL
             );
@@ -144,6 +145,14 @@ async def init_db():
                 ON session_summaries(session_id);
         """)
         await db.commit()
+
+        # 迁移：为已有 messages 表添加 tool_call_id 列
+        try:
+            await db.execute("ALTER TABLE messages ADD COLUMN tool_call_id TEXT")
+            await db.commit()
+        except Exception:
+            pass  # 列已存在，忽略
+
         log.info("数据库初始化完成: %s", DB_PATH)
     finally:
         await db.close()
@@ -236,15 +245,16 @@ async def delete_session(session_id: str) -> bool:
 
 async def add_message(session_id: str, role: str, content: str,
                       tool_calls: str | None = None,
+                      tool_call_id: str | None = None,
                       tool_result: str | None = None) -> int:
     """添加消息，返回消息 ID"""
     now = _now()
     db = await get_db()
     try:
         cursor = await db.execute(
-            "INSERT INTO messages (session_id, role, content, tool_calls, tool_result, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (session_id, role, content, tool_calls, tool_result, now),
+            "INSERT INTO messages (session_id, role, content, tool_calls, tool_call_id, tool_result, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (session_id, role, content, tool_calls, tool_call_id, tool_result, now),
         )
         await db.commit()
         return cursor.lastrowid
