@@ -14,7 +14,9 @@ LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "8192"))
 LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "120"))
 
 # --- Agentic Loop ---
+# Agentic Loop 最大执行轮次
 AGENT_MAX_TURNS = int(os.environ.get("AGENT_MAX_TURNS", "10"))
+# 工具批处理大小
 TOOL_BATCH_SIZE = int(os.environ.get("TOOL_BATCH_SIZE", "5"))
 
 # --- Embedding API ---
@@ -63,20 +65,33 @@ MINERU_LIGHT_MAX_PAGES = 20
 AKSHARE_CACHE_TTL = int(os.environ.get("AKSHARE_CACHE_TTL", "3600"))
 
 # --- Deep Research ---
-RESEARCH_MAX_SUBTASKS = 8        # 最大子任务数
-RESEARCH_EXECUTOR_MAX_TURNS = 8  # Executor 最大工具调用轮次
-RESEARCH_EXECUTOR_TIMEOUT = 120  # 单个 Executor 超时（秒）
+# 最大子任务数
+RESEARCH_MAX_SUBTASKS = 8        
+# Executor 最大工具调用轮次
+RESEARCH_EXECUTOR_MAX_TURNS = 8  
+# 单个 Executor 超时（秒）
+RESEARCH_EXECUTOR_TIMEOUT = 120  
 
 # --- Memory ---
+# 用户画像路径
 MEMORY_PROFILE_PATH = os.path.join(BASE_DIR, "data", "profile.json")
+# 用户画像候选池路径
 MEMORY_CANDIDATES_PATH = os.path.join(BASE_DIR, "data", "profile_candidates.json")
+# 会话记忆集合名称
 MEMORY_SESSION_COLLECTION = "session_memory"
+# 会话记忆最大 token 数量
 MEMORY_SESSION_MAX_TOKENS = int(os.environ.get("MEMORY_SESSION_MAX_TOKENS", "6000"))
+# 会话记忆压缩轮次（超过预算时压缩最早的消息，最多压缩多少轮）
 MEMORY_COMPRESS_ROUNDS = 3
+# 记忆时间衰减 lambda（用于计算记忆重要性时，时间越久远的记忆衰减越多）
 MEMORY_TIME_DECAY_LAMBDA = float(os.environ.get("MEMORY_TIME_DECAY_LAMBDA", "0.05"))
+# 会话记忆跨会话 top-k 选择（用于从所有会话中选择最相关的 k 条记忆）
 MEMORY_CROSS_SESSION_TOP_K = int(os.environ.get("MEMORY_CROSS_SESSION_TOP_K", "5"))
+# 会话记忆跨会话注入 k 条记忆（用于从所有会话中注入 k 条记忆）
 MEMORY_CROSS_SESSION_INJECT_K = int(os.environ.get("MEMORY_CROSS_SESSION_INJECT_K", "3"))
+# 会话记忆用户画像更新间隔（秒）
 MEMORY_PROFILE_UPDATE_INTERVAL = int(os.environ.get("MEMORY_PROFILE_UPDATE_INTERVAL", "3"))
+# 会话记忆最小保留轮次（用于控制记忆的保留时间）
 MEMORY_MIN_KEEP_ROUNDS = 5
 
 # --- Web 服务 ---

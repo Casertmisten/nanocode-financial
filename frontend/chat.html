@@ -669,13 +669,13 @@
     .message-content hr { border: none; border-top: 1px solid var(--color-border); margin: 0.8em 0; }
     .message-content strong { font-weight: 600; }
 
-    /* 信息来源可折叠横条 */
-    .message-sources {
+    /* 工具调用链可折叠区域 */
+    .message-toolchain {
       margin-bottom: 6px;
       font: var(--font-caption);
       color: var(--color-outline);
     }
-    .message-sources-bar {
+    .toolchain-bar {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -686,30 +686,50 @@
       user-select: none;
       transition: background var(--transition-fast);
     }
-    .message-sources-bar:hover { background: var(--color-border); }
-    .message-sources-bar::before {
-      content: '●';
-      font-size: 8px;
-      color: var(--color-primary);
-    }
-    .message-sources-bar .sources-label { flex: 1; }
-    .message-sources-bar .sources-arrow {
+    .toolchain-bar:hover { background: var(--color-border); }
+    .toolchain-bar .toolchain-label { flex: 1; font-size: 12px; }
+    .toolchain-bar .toolchain-arrow {
       font-size: 10px;
       transition: transform 0.2s;
     }
-    .message-sources.open .sources-arrow { transform: rotate(90deg); }
-    .message-sources-body {
+    .message-toolchain.open .toolchain-arrow { transform: rotate(90deg); }
+    .toolchain-body {
       display: none;
-      padding: 6px 10px;
-      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      padding: 6px 0;
       background: var(--color-bg-hover);
+      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
       margin-top: 2px;
     }
-    .message-sources.open .message-sources-body { display: block; }
-    .message-sources-body ul, .message-sources-body p {
-      margin: 0.2em 0;
-      padding-left: 1.2em;
-      font-size: 0.92em;
+    .message-toolchain.open .toolchain-body { display: block; }
+    /* 单个工具调用步骤 */
+    .tool-step {
+      padding: 5px 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+    }
+    .tool-step + .tool-step { border-top: 1px dashed var(--color-border); }
+    .tool-step-icon {
+      width: 16px; height: 16px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 9px; margin-top: 2px;
+    }
+    .tool-step-icon.running {
+      background: var(--color-primary); color: white;
+      animation: drPulse 1s ease-in-out infinite;
+    }
+    .tool-step-icon.done {
+      background: var(--color-success); color: white;
+    }
+    .tool-step-content {
+      flex: 1; min-width: 0;
+      color: var(--color-on-surface-variant);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tool-step-content strong {
+      color: var(--color-on-surface); font-weight: 500;
     }
 
     /* 深度研究模式指示 */
@@ -911,22 +931,48 @@
 
   <script src="js/api.js"></script>
   <script>
-    // --- 信息来源提取 ---
-    function extractSources(text) {
-      const idx = text.lastIndexOf('【信息来源】');
-      if (idx === -1) return { content: text, sources: null };
-      const content = text.slice(0, idx).trimEnd();
-      const sources = text.slice(idx + '【信息来源】'.length).trim();
-      return sources ? { content, sources } : { content, sources: null };
+    // --- 工具调用链渲染 ---
+    // 工具名称中文映射
+    const TOOL_LABELS = {
+      rag_query: '知识库检索',
+      web_search: '网络搜索',
+      read_file: '读取文件',
+      list_files: '文件列表',
+      calculate: '计算',
+    };
+
+    function getToolLabel(name) {
+      return TOOL_LABELS[name] || name;
     }
 
-    function renderSourcesHtml(sources) {
-      return `<div class="message-sources" onclick="this.classList.toggle('open')">
-        <div class="message-sources-bar">
-          <span class="sources-label">信息来源</span>
-          <span class="sources-arrow">▶</span>
+    function formatResult(result) {
+      if (!result) return '';
+      const s = String(result).replace(/\n/g, ' ');
+      return s.length > 120 ? s.slice(0, 120) + '...' : s;
+    }
+
+    function renderToolchainHtml(toolCalls) {
+      if (!toolCalls || toolCalls.length === 0) return '';
+      const steps = toolCalls.map(tc => {
+        const iconClass = tc.done ? 'done' : 'running';
+        const iconChar = tc.done ? '✓' : '...';
+        const resultText = tc.result ? escapeHtml(formatResult(tc.result)) : '执行中...';
+        return `<div class="tool-step">
+          <span class="tool-step-icon ${iconClass}">${iconChar}</span>
+          <div class="tool-step-content"><strong>${escapeHtml(getToolLabel(tc.tool))}：</strong>${resultText}</div>
+        </div>`;
+      }).join('');
+      const count = toolCalls.length;
+      const doneCount = toolCalls.filter(t => t.done).length;
+      const labelText = count === doneCount
+        ? `工具调用 (${count} 步)`
+        : `工具调用 (${doneCount}/${count})`;
+      return `<div class="message-toolchain" onclick="this.classList.toggle('open')">
+        <div class="toolchain-bar">
+          <span class="toolchain-label">${labelText}</span>
+          <span class="toolchain-arrow">▶</span>
         </div>
-        <div class="message-sources-body">${marked.parse(sources)}</div>
+        <div class="toolchain-body">${steps}</div>
       </div>`;
     }
 
@@ -1065,16 +1111,16 @@
         }
         const raw = msg.content;
         const isHtml = msg._html;
-        const { content: mainContent, sources } = extractSources(raw);
-        const contentHtml = isHtml ? mainContent : marked.parse(mainContent);
-        const sourcesHtml = sources ? renderSourcesHtml(sources) : '';
+        const contentHtml = isHtml ? raw : marked.parse(raw);
+        const toolchainHtml = msg.toolCalls && msg.toolCalls.length
+          ? renderToolchainHtml(msg.toolCalls) : '';
         return `
           <div class="message message-assistant">
             <div class="message-avatar">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             </div>
             <div class="message-body">
-              ${sourcesHtml}
+              ${toolchainHtml}
               <div class="message-content">${contentHtml}</div>
               <div class="message-meta">
                 <span>${time}</span>
@@ -1110,7 +1156,8 @@
 
       let fullReply = '';
       let streamEl = null;
-      let sourcesEl = null;
+      let toolchainEl = null;
+      let toolCalls = [];
 
       ssePost('/chat', {
         session_id: currentChatId,
@@ -1123,7 +1170,7 @@
           if (!streamEl) {
             typingEl.remove();
             // 首次收到 token，创建助手消息 DOM
-            messages.push({ role: 'assistant', content: fullReply, time: new Date(), _finished: false });
+            messages.push({ role: 'assistant', content: fullReply, time: new Date(), _finished: false, toolCalls });
             const div = document.createElement('div');
             div.className = 'message message-assistant';
             div.innerHTML = `
@@ -1138,19 +1185,43 @@
           } else {
             messages[messages.length - 1].content = fullReply;
           }
-          // 拆分信息来源
-          const { content: mainContent, sources } = extractSources(fullReply);
-          streamEl.innerHTML = marked.parse(mainContent);
-          if (sources) {
+          streamEl.innerHTML = marked.parse(fullReply);
+          scrollToBottom();
+        },
+        onToolStart: (tool, args) => {
+          toolCalls.push({ tool, args, result: null, done: false });
+          // 如果还没创建消息 DOM，先创建
+          if (!streamEl) {
+            typingEl.remove();
+            messages.push({ role: 'assistant', content: '', time: new Date(), _finished: false, toolCalls });
+            const div = document.createElement('div');
+            div.className = 'message message-assistant';
+            div.innerHTML = `
+              <div class="message-avatar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              </div>
+              <div class="message-body">
+                <div class="message-content"></div>
+              </div>`;
+            messagesContainer.appendChild(div);
+            streamEl = div.querySelector('.message-content');
+          }
+          // 更新工具链 DOM
+          const body = streamEl.closest('.message-body');
+          updateToolchainDom(body, toolCalls);
+          scrollToBottom();
+        },
+        onToolEnd: (tool, result) => {
+          // 找到对应的未完成工具调用
+          const tc = toolCalls.find(t => t.tool === tool && !t.done);
+          if (tc) {
+            tc.result = result;
+            tc.done = true;
+          }
+          // 更新工具链 DOM
+          if (streamEl) {
             const body = streamEl.closest('.message-body');
-            if (!sourcesEl) {
-              sourcesEl = document.createElement('div');
-              sourcesEl.innerHTML = renderSourcesHtml(sources);
-              body.insertBefore(sourcesEl.firstElementChild, body.querySelector('.message-content'));
-              sourcesEl = body.querySelector('.message-sources');
-            } else {
-              sourcesEl.querySelector('.message-sources-body').innerHTML = marked.parse(sources);
-            }
+            updateToolchainDom(body, toolCalls);
           }
           scrollToBottom();
         },
@@ -1167,6 +1238,23 @@
           isLoading = false;
         },
       });
+    }
+
+    // 更新工具链 DOM（增量刷新）
+    function updateToolchainDom(bodyEl, toolCalls) {
+      let tcEl = bodyEl.querySelector('.message-toolchain');
+      if (!toolCalls || toolCalls.length === 0) return;
+      const html = renderToolchainHtml(toolCalls);
+      const contentEl = bodyEl.querySelector('.message-content');
+      if (tcEl) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        tcEl.replaceWith(tmp.firstElementChild);
+      } else if (contentEl) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        bodyEl.insertBefore(tmp.firstElementChild, contentEl);
+      }
     }
 
     // --- 对话管理 ---
@@ -1277,7 +1365,39 @@
         messagesContainer.innerHTML = '';
 
         for (const m of (data.messages || [])) {
-          messages.push({ role: m.role, content: m.content, time: new Date(m.created_at) });
+          messages.push({ role: m.role, content: m.content, time: new Date(m.created_at), tool_calls_str: m.tool_calls });
+        }
+        // 将 tool 消息聚合到前一条 assistant 消息的 toolCalls 上
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i];
+          if (msg.role !== 'assistant') continue;
+          const toolCalls = [];
+          // 如果 assistant 消息自身有 tool_calls，解析出来
+          if (msg.tool_calls_str) {
+            try {
+              const tcList = typeof msg.tool_calls_str === 'string'
+                ? JSON.parse(msg.tool_calls_str) : msg.tool_calls_str;
+              tcList.forEach(tc => {
+                const args = {};
+                try { Object.assign(args, JSON.parse(tc.function.arguments)); } catch {}
+                toolCalls.push({ tool: tc.function.name, args, result: null, done: false });
+              });
+            } catch {}
+          }
+          // 紧跟其后的 tool 消息作为结果填充
+          let j = i + 1;
+          let tcIdx = 0;
+          while (j < messages.length && messages[j].role === 'tool') {
+            if (tcIdx < toolCalls.length) {
+              toolCalls[tcIdx].result = messages[j].content;
+              toolCalls[tcIdx].done = true;
+            }
+            tcIdx++;
+            j++;
+          }
+          if (toolCalls.length > 0) {
+            msg.toolCalls = toolCalls;
+          }
         }
         renderMessages();
         scrollToBottom();
