@@ -147,18 +147,30 @@ def _compress_messages(messages: list[dict]) -> list[dict]:
 
 
 def _save_memory(session_id: str, messages: list[dict]):
-    """对话结束后保存 L2 跨会话记忆 + L1 画像候选。"""
+    """会话结束时保存 L2 跨会话记忆 + L1 画像候选（异步执行）。"""
+    import asyncio
     if not messages:
         return
     text = _serialize_messages_for_summary(messages)
     try:
-        summary, topics, candidates = _session_mem.generate_summary(text)
-        _session_mem.save_session_memory(session_id, summary, topics, "cli")
+        loop = asyncio.new_event_loop()
+        try:
+            summary, topics, candidates = loop.run_until_complete(
+                _session_mem.generate_summary(text))
+            loop.run_until_complete(
+                _session_mem.save_session_memory(session_id, summary, topics, "cli"))
+        finally:
+            loop.close()
     except Exception:
         return
     if candidates:
         try:
-            _profile_mod.add_candidate(session_id, candidates)
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(
+                    _profile_mod.add_candidate(session_id, candidates))
+            finally:
+                loop.close()
         except Exception:
             pass
 
@@ -421,18 +433,18 @@ def main():
             _run_agentic_loop(messages, turn_prompt)
             print()
 
-            # 保存记忆
-            try:
-                _save_memory(session_id, messages)
-            except Exception:
-                pass
-
         except SystemExit:
             break
         except (KeyboardInterrupt, EOFError):
             break
         except Exception as err:
             print(f"{config.RED}⏺ Error: {err}{config.RESET}")
+
+    # 会话结束时保存记忆
+    try:
+        _save_memory(session_id, messages)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

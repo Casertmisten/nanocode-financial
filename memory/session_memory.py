@@ -37,14 +37,15 @@ def _get_embedding(text: str) -> list[float]:
     return embed_model.get_text_embedding(text)
 
 
-def generate_summary(messages_text: str) -> tuple[str, list[str], dict]:
-    """调用 LLM 生成会话摘要。
+async def generate_summary(messages_text: str) -> tuple[str, list[str], dict]:
+    """调用 LLM 生成会话摘要（异步）。
 
     Returns:
         (summary, topics, profile_candidates)
     """
+    import asyncio
     prompt = SUMMARY_PROMPT.format(messages=messages_text)
-    result = llm.call_llm("你是一个对话摘要助手。", prompt)
+    result = await asyncio.to_thread(llm.call_llm, "你是一个对话摘要助手。", prompt)
 
     # 解析 XML 标签
     summary = _extract_tag(result, "summary") or result[:200]
@@ -70,15 +71,17 @@ def _extract_tag(text: str, tag: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-def save_session_memory(session_id: str, summary: str, topics: list[str],
-                         session_type: str = "chat"):
-    """将会话摘要向量化并保存到 ChromaDB。"""
+async def save_session_memory(session_id: str, summary: str, topics: list[str],
+                               session_type: str = "chat"):
+    """将会话摘要向量化并保存到 ChromaDB（异步）。"""
+    import asyncio
+
     if not summary.strip():
         log.warning("摘要为空，跳过保存: session=%s", session_id)
         return
 
-    collection = _get_collection()
-    embedding = _get_embedding(summary)
+    collection = await asyncio.to_thread(_get_collection)
+    embedding = await asyncio.to_thread(_get_embedding, summary)
     now = datetime.now(timezone.utc).isoformat()
 
     doc_id = f"sm_{session_id}_{int(datetime.now().timestamp())}"

@@ -44,14 +44,16 @@ async def inject_memory(session_id: str, messages: list[dict],
     return compressed, memory_injection
 
 
-async def save_after_turn(session_id: str, messages: list[dict],
-                           session_type: str = "chat"):
-    """对话结束后保存记忆（L2 写入 + L1 候选提取）。
+async def save_session_end(session_id: str, messages: list[dict],
+                            session_type: str = "chat"):
+    """会话结束时保存记忆（L2 写入 + L1 候选提取）。
+
+    仅在会话结束或新会话创建时调用，不再每轮触发。
 
     Args:
         session_id: 会话 ID
         messages: 本次会话的全部消息
-        session_type: "chat" 或 "deep_research"
+        session_type: "chat" 或 "deep_research" 或 "cli"
     """
     if not messages:
         return
@@ -60,19 +62,19 @@ async def save_after_turn(session_id: str, messages: list[dict],
     from memory.context import _serialize_messages_for_summary
     text = _serialize_messages_for_summary(messages)
 
-    # L2: 生成摘要并保存
+    # L2: 异步生成摘要并保存
     try:
-        summary, topics, profile_candidates = generate_summary(text)
-        save_session_memory(session_id, summary, topics, session_type)
+        summary, topics, profile_candidates = await generate_summary(text)
+        await save_session_memory(session_id, summary, topics, session_type)
     except Exception:
         import logging
         logging.getLogger("memory").warning("保存跨会话记忆失败", exc_info=True)
         return
 
-    # L1: 提取画像候选
+    # L1: 异步提取画像候选
     if profile_candidates:
         try:
-            add_candidate(session_id, profile_candidates)
+            await add_candidate(session_id, profile_candidates)
         except Exception:
             import logging
             logging.getLogger("memory").warning("保存画像候选失败", exc_info=True)
