@@ -16,7 +16,7 @@ SUMMARY_PROMPT = """你是一个对话摘要助手。请对以下对话进行摘
 ["主题1", "主题2", "主题3"]
 </topics>
 <profile_candidates>
-{"focus_sectors": [], "watched_stocks": [], "preferred_markets": [], "risk_tolerance": "", "report_style": ""}
+{{"focus_sectors": [], "watched_stocks": [], "preferred_markets": [], "risk_tolerance": "", "report_style": ""}}
 </profile_candidates>
 
 对话内容：

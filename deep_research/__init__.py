@@ -69,7 +69,7 @@ async def execute(query: str, sub_tasks: list[SubTask]) -> tuple[list[ExecutorRe
     try:
         from memory.session_memory import save_session_memory
         topics = [query[:20]]
-        save_session_memory(
+        await save_session_memory(
             f"research_{report_id}",
             report[:1000],
             topics,

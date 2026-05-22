@@ -292,20 +292,6 @@ async def chat(req: ChatRequest):
 
         log.info("对话完成: session=%s, message_id=%s", req.session_id, message_id)
 
-        # 保存三层记忆（异步后台执行，不阻塞响应）
-        try:
-            all_session_msgs = await db.get_messages(req.session_id)
-
-            async def _safe_save():
-                try:
-                    await memory_module.save_after_turn(req.session_id, all_session_msgs)
-                except Exception:
-                    log.warning("记忆保存失败", exc_info=True)
-
-            asyncio.create_task(_safe_save())
-        except Exception:
-            log.warning("触发记忆保存失败", exc_info=True)
-
         yield _sse("done", {"message_id": message_id})
 
     return StreamingResponse(stream(), media_type="text/event-stream")

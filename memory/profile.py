@@ -59,8 +59,8 @@ def render_profile_markdown(profile: dict | None) -> str:
     return "\n".join(lines)
 
 
-def add_candidate(session_id: str, fields: dict):
-    """将一轮会话提取的画像候选写入候选池。"""
+async def add_candidate(session_id: str, fields: dict):
+    """将一轮会话提取的画像候选写入候选池（异步）。"""
     path = config.MEMORY_CANDIDATES_PATH
     candidates_data = {"candidates": [], "session_count": 0}
     if os.path.exists(path):
@@ -85,11 +85,13 @@ def add_candidate(session_id: str, fields: dict):
 
     # 检查是否触发画像更新
     if candidates_data["session_count"] >= config.MEMORY_PROFILE_UPDATE_INTERVAL:
-        _update_profile(candidates_data)
+        await _update_profile(candidates_data)
 
 
-def _update_profile(candidates_data: dict):
-    """用 LLM 合并候选并更新 profile.json。"""
+async def _update_profile(candidates_data: dict):
+    """用 LLM 合并候选并更新 profile.json（异步）。"""
+    import asyncio
+
     current_profile = load_profile() or _DEFAULT_PROFILE
     candidates_text = json.dumps(candidates_data["candidates"], ensure_ascii=False, indent=2)
 
@@ -99,7 +101,7 @@ def _update_profile(candidates_data: dict):
     )
 
     try:
-        result = llm.call_llm("你是一个用户画像管理助手。", prompt)
+        result = await asyncio.to_thread(llm.call_llm, "你是一个用户画像管理助手。", prompt)
         # 提取 JSON（可能包裹在 ```json ... ``` 中）
         result = result.strip()
         if result.startswith("```"):

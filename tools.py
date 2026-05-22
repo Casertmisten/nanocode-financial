@@ -288,27 +288,27 @@ TOOLS = {
         stock_list_tool,
     ),
     "stock_basic_info": (
-        "获取个股基本信息（公司名称、行业、市值等）。参数code为股票代码，如600000。",
+        "获取个股基本信息（公司名称、行业、市值等）。参数code为股票代码。如果没有股票代码，请先使用**stock_list**工具查询。",
         {"code": "string"},
         stock_basic_info_tool,
     ),
     "stock_quotes": (
-        "获取个股实时行情（最新价、涨跌幅、成交量等）。参数code为股票代码。",
+        "获取个股实时行情（最新价、涨跌幅、成交量等）。参数code为股票代码。如果没有股票代码，请先使用**stock_list**工具查询。",
         {"code": "string"},
         stock_quotes_tool,
     ),
     "batch_stock_quotes": (
-        "批量获取多只股票实时行情。参数codes为逗号分隔的股票代码，如'600000,000001'。",
+        "批量获取多只股票实时行情。参数codes为逗号分隔的股票代码，如'600000,000001'。如果没有股票代码，请先使用**stock_list**工具查询。",
         {"codes": "string"},
         batch_stock_quotes_tool,
     ),
     "stock_historical": (
-        "获取个股历史K线数据。参数：code(股票代码)、start_date(起始日期YYYYMMDD)、end_date(结束日期YYYYMMDD)、period(周期: daily/weekly/monthly，可选)。",
+        "获取个股历史K线数据。参数：code(股票代码)、start_date(起始日期YYYYMMDD)、end_date(结束日期YYYYMMDD)、period(周期: daily/weekly/monthly，可选)。如果没有股票代码，请先使用**stock_list**工具查询。",
         {"code": "string", "start_date": "string", "end_date": "string", "period": "string?"},
         stock_historical_tool,
     ),
     "stock_financial": (
-        "获取个股财务数据（利润表、资产负债表、现金流量表等）。参数code为股票代码。",
+        "获取个股财务数据（利润表、资产负债表、现金流量表等）。参数code为股票代码。如果没有股票代码，请先使用**stock_list**工具查询。",
         {"code": "string"},
         stock_financial_tool,
     ),
