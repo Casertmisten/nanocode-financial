@@ -88,6 +88,36 @@ async def add_candidate(session_id: str, fields: dict):
         await _update_profile(candidates_data)
 
 
+def _dedup_profile(profile: dict, max_list_len: int = 15) -> dict:
+    """代码层兜底去重：列表字段去重 + 截断。"""
+    list_keys = {"preferred_markets", "focus_sectors", "watched_stocks"}
+    for key in list_keys:
+        items = profile.get(key)
+        if not isinstance(items, list):
+            continue
+        seen = []
+        for item in items:
+            s = str(item).strip()
+            if not s or s in seen:
+                continue
+            # 简单子串去重：如果已有条目包含当前项，或当前项包含已有条目，跳过
+            # 只在长度差异较小时合并，避免"白酒"吃掉"白酒板块龙头分析"
+            skip = False
+            for existing in seen:
+                if s in existing or existing in s:
+                    # 保留更长的（更具体的）
+                    if len(existing) >= len(s):
+                        skip = True
+                        break
+                    else:
+                        seen.remove(existing)
+                        break
+            if not skip:
+                seen.append(s)
+        profile[key] = seen[:max_list_len]
+    return profile
+
+
 async def _update_profile(candidates_data: dict):
     """用 LLM 合并候选并更新 profile.json（异步）。"""
     import asyncio
@@ -113,6 +143,9 @@ async def _update_profile(candidates_data: dict):
         # 清空候选池避免无限累积
         _clear_candidates()
         return
+
+    # 代码层兜底去重：列表字段去重 + 截断
+    new_profile = _dedup_profile(new_profile)
 
     # 写入 profile.json
     profile_data = {

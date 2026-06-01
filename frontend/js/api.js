@@ -19,10 +19,12 @@ async function api(method, path, body = null) {
  * @param {function} onToken - 收到 token 事件回调 (content: string)
  * @param {function} onToolStart - 工具开始回调 (tool: string, args: object)
  * @param {function} onToolEnd - 工具结束回调 (tool: string, result: string)
+ * @param {function} onWorkflowStep - 工作流步骤回调 (step: string, idx: int, total: int)
+ * @param {function} onWorkflowStart - 工作流开始回调 (workflow: string, label: string)
  * @param {function} onDone - 完成回调 (messageId: number)
  * @param {function} onError - 错误回调 (error: Error)
  */
-async function ssePost(path, body, { onToken, onToolStart, onToolEnd, onDone, onError }) {
+async function ssePost(path, body, { onToken, onToolStart, onToolEnd, onWorkflowStep, onWorkflowStart, onDone, onError }) {
     const res = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,6 +66,12 @@ async function ssePost(path, body, { onToken, onToolStart, onToolEnd, onDone, on
                             break;
                         case 'tool_end':
                             if (onToolEnd) onToolEnd(data.tool, data.result);
+                            break;
+                        case 'workflow_start':
+                            if (onWorkflowStart) onWorkflowStart(data.workflow, data.label);
+                            break;
+                        case 'workflow_step':
+                            if (onWorkflowStep) onWorkflowStep(data.step, data.idx, data.total);
                             break;
                         case 'done':
                             if (onDone) onDone(data.message_id);

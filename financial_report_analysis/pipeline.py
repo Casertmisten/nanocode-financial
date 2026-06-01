@@ -1,8 +1,12 @@
-"""Map-Reduce 流水线：检索 → 去重 → 维度分析 → 汇总报告。"""
+"""Map-Reduce 流水线：检索 → 去重 → 维度分析（并行） → 汇总报告。"""
 
+import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
+
 import config
 import rag
+import llm as llm_mod
 from prompts.financial_report_analysis import (
     analyze_prompt,
     analyze_system_prompt,
@@ -16,18 +20,13 @@ log = logging.getLogger(__name__)
 _TOP_K_PER_QUESTION = 3
 
 
-def _call_llm(system_prompt: str, user_content: str) -> str:
-    """纯文本 LLM 调用，不携带工具。"""
-    import llm
-    return llm.call_llm(system_prompt, user_content)
+async def _call_llm(system_prompt: str, user_content: str) -> str:
+    """异步 LLM 调用。"""
+    return await llm_mod.async_call_llm(system_prompt, user_content)
 
 
-def _retrieve_all():
-    """Map 阶段：逐子问题检索，维度内去重。
-
-    Returns:
-        list[dict]: 每个元素包含 name, chunks, sources。
-    """
+async def _retrieve_all():
+    """Map 阶段：逐子问题检索，维度内去重。"""
     dim_data = []
     total = sum(len(d["sub_questions"]) for d in DIMENSIONS)
     done = 0
@@ -45,7 +44,7 @@ def _retrieve_all():
                 flush=True,
             )
             try:
-                results = rag.query(sq, top_k=_TOP_K_PER_QUESTION)
+                results = await asyncio.to_thread(rag.query, sq, top_k=_TOP_K_PER_QUESTION)
             except Exception:
                 log.warning("检索子问题失败: %s", sq, exc_info=True)
                 results = []
@@ -67,17 +66,17 @@ def _retrieve_all():
     return dim_data
 
 
-def _analyze_dimension(name: str, chunks: list[str]) -> str:
+async def _analyze_dimension(name: str, chunks: list[str]) -> str:
     """Analyze 阶段：对一个维度生成分析小结。"""
     if not chunks:
         return f"【{name}】该维度缺乏足够数据，无法进行分析。"
 
     chunks_text = "\n\n---\n\n".join(chunks)
     prompt = analyze_prompt.format(dimension_name=name, chunks=chunks_text)
-    return _call_llm(analyze_system_prompt, prompt)
+    return await _call_llm(analyze_system_prompt, prompt)
 
 
-def _reduce(query: str, summaries: dict[str, str], sources: set[str]) -> str:
+async def _reduce(query: str, summaries: dict[str, str], sources: set[str]) -> str:
     """Reduce 阶段：汇总各维度小结为完整报告。"""
     summaries_text = ""
     for dim in DIMENSIONS:
@@ -87,34 +86,49 @@ def _reduce(query: str, summaries: dict[str, str], sources: set[str]) -> str:
     prompt = reduce_prompt.format(
         query=query, summaries=summaries_text, sources=sources_text
     )
-    return _call_llm(reduce_system_prompt, prompt)
+    return await _call_llm(reduce_system_prompt, prompt)
 
 
-def run(query: str) -> str:
-    """执行完整的 Deep Research 流程。
+async def run(query: str, progress_cb=None) -> str:
+    """执行完整的财报分析流程（异步并行）。
 
     Args:
         query: 用户研究需求。
+        progress_cb: 进度回调。
 
     Returns:
         Markdown 格式的完整报告。
     """
     # Map: 检索
-    dim_data = _retrieve_all()
+    dim_data = await _retrieve_all()
 
-    # Analyze: 逐维度分析
-    summaries = {}
-    for i, dd in enumerate(dim_data, 1):
-        print(f"  {config.DIM}⏺ 分析 [{i}/{len(dim_data)}] {dd['name']}{config.RESET}")
-        summaries[dd["name"]] = _analyze_dimension(dd["name"], dd["chunks"])
+    # Analyze: 各维度并行分析
+    async def _analyze_one(dd, idx):
+        print(f"  {config.DIM}⏺ 分析 [{idx}/{len(dim_data)}] {dd['name']}{config.RESET}")
+        return dd["name"], await _analyze_dimension(dd["name"], dd["chunks"])
+
+    results = await asyncio.gather(*[
+        _analyze_one(dd, i) for i, dd in enumerate(dim_data, 1)
+    ])
+    summaries = {name: result for name, result in results}
 
     # 汇总来源
     all_sources = set()
     for dd in dim_data:
         all_sources.update(dd["sources"])
 
-    # Reduce: 生成报告
+    # Reduce: 生成报告（流式输出）
     print(f"  {config.DIM}⏺ 生成报告...{config.RESET}")
-    report = _reduce(query, summaries, all_sources)
+    summaries_text = ""
+    for dim in DIMENSIONS:
+        summaries_text += f"\n## {dim['name']}\n{summaries[dim['name']]}\n"
+    sources_text = "\n".join(f"· {s}" for s in sorted(all_sources))
+    reduce_user = reduce_prompt.format(query=query, summaries=summaries_text, sources=sources_text)
+
+    def _on_token(text):
+        if progress_cb:
+            progress_cb({"type": "token", "content": text})
+
+    report = await llm_mod.async_stream_llm(reduce_system_prompt, reduce_user, on_token=_on_token)
 
     return report

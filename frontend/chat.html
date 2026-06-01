@@ -259,6 +259,60 @@
       30% { transform: translateY(-4px); opacity: 1; }
     }
 
+    /* 工作流进度条 */
+    .workflow-progress {
+      padding: var(--stack-md);
+      background: var(--color-surface-container-lowest);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      border-left: 3px solid var(--color-primary);
+      min-width: 260px;
+    }
+    .workflow-progress-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-primary);
+      margin-bottom: 8px;
+    }
+    .workflow-progress-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .workflow-progress-bar .wp-seg {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--color-outline-variant);
+      transition: background 0.3s;
+    }
+    .workflow-progress-bar .wp-seg.done {
+      background: var(--color-primary);
+    }
+    .workflow-progress-bar .wp-seg.active {
+      background: var(--color-primary);
+      animation: wpPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes wpPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .workflow-step-text {
+      font-size: 12px;
+      color: var(--color-on-surface-variant);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .workflow-step-text .spinner {
+      width: 12px; height: 12px;
+      border: 2px solid var(--color-outline-variant);
+      border-top-color: var(--color-primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     /* 输入区域 */
     .chat-input-area {
       padding: var(--stack-md) calc(var(--stack-lg) * 2) var(--stack-lg);
@@ -1222,6 +1276,8 @@
       let toolchainEl = null;
       let toolCalls = [];
 
+      let wfState = null; // 工作流进度状态 {label, total, currentIdx, el}
+
       ssePost('/chat', {
         session_id: currentChatId,
         message: userText,
@@ -1229,6 +1285,44 @@
         doc_ids: getSelectedDocIds(),
         pro_mode: proModeActive,
       }, {
+        onWorkflowStart: (workflow, label) => {
+          // 替换 typing indicator 为工作流进度
+          typingEl.innerHTML = `
+            <div class="message-avatar" style="background: linear-gradient(135deg, var(--color-primary), var(--color-primary-container)); color: white;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg>
+            </div>
+            <div class="workflow-progress">
+              <div class="workflow-progress-label">${label}</div>
+              <div class="workflow-progress-bar" id="wfBar"></div>
+              <div class="workflow-step-text" id="wfStepText">
+                <div class="spinner"></div>
+                <span>准备中...</span>
+              </div>
+            </div>`;
+          wfState = { label, total: 0, currentIdx: 0 };
+          scrollToBottom();
+        },
+        onWorkflowStep: (step, idx, total) => {
+          if (!wfState) return;
+          wfState.total = total;
+          wfState.currentIdx = idx;
+          // 更新进度条
+          const bar = document.getElementById('wfBar');
+          if (bar) {
+            let segs = '';
+            for (let i = 1; i <= total; i++) {
+              const cls = i < idx ? 'done' : i === idx ? 'active' : '';
+              segs += `<div class="wp-seg ${cls}"></div>`;
+            }
+            bar.innerHTML = segs;
+          }
+          // 更新步骤文字
+          const text = document.getElementById('wfStepText');
+          if (text) {
+            text.innerHTML = `<div class="spinner"></div><span>步骤 ${idx}/${total}：${step}</span>`;
+          }
+          scrollToBottom();
+        },
         onToken: (content) => {
           fullReply += content;
           if (!streamEl) {

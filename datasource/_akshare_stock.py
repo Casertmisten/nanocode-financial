@@ -128,26 +128,35 @@ class AKShareStockProvider:
             return []
 
     def get_stock_basic_info(self, code: str) -> Optional[dict]:
-        _ensure_initialized()
-        if _ak is None:
-            return None
+        """直接请求东方财富 API 获取个股信息，绕过 akshare 的列重命名 bug。"""
+        import requests as _req
         try:
-            info_df = _ak.stock_individual_info_em(symbol=code)
-            if info_df is not None and not info_df.empty:
-                info = {"code": code}
-                for item_name, key in [
-                    ("股票简称", "name"), ("所属行业", "industry"),
-                    ("所属地区", "area"), ("上市时间", "list_date"),
-                ]:
-                    row = info_df[info_df["item"] == item_name]
-                    if not row.empty:
-                        info[key] = str(row["value"].iloc[0])
-                info.setdefault("name", f"股票{code}")
+            market_code = 1 if code.startswith("6") else 0
+            url = "https://push2.eastmoney.com/api/qt/stock/get"
+            params = {
+                "fltt": "2", "invt": "2",
+                "fields": "f57,f58,f84,f85,f127,f116,f117,f189,f43",
+                "secid": f"{market_code}.{code}",
+            }
+            resp = _req.get(url, params=params, timeout=10, proxies={"http": None, "https": None})
+            resp.raise_for_status()
+            data = resp.json().get("data", {})
+            if data:
+                info = {
+                    "code": code,
+                    "name": data.get("f58", f"股票{code}"),
+                    "industry": data.get("f127", "未知"),
+                    "list_date": str(data.get("f189", "")),
+                    "total_share": data.get("f84"),
+                    "float_share": data.get("f85"),
+                    "total_mv": data.get("f116"),
+                    "float_mv": data.get("f117"),
+                    "latest_price": data.get("f43"),
+                    "market": determine_market(code),
+                    "full_symbol": get_full_symbol(code),
+                    "market_info": get_market_info(code),
+                }
                 info.setdefault("industry", "未知")
-                info.setdefault("area", "未知")
-                info["market"] = determine_market(code)
-                info["full_symbol"] = get_full_symbol(code)
-                info["market_info"] = get_market_info(code)
                 return info
         except Exception as e:
             log.warning("获取 %s 基本信息失败: %s", code, e)

@@ -348,6 +348,12 @@ def run_tool(name, args):
         return f"error: {err}"
 
 
+async def run_tool_async(name, args):
+    """异步执行工具（同步工具的异步包装）。"""
+    import asyncio
+    return await asyncio.to_thread(run_tool, name, args)
+
+
 def make_schema():
     """生成 OpenAI调用格式的工具注册。"""
     result = []

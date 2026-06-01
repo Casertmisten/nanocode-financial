@@ -157,3 +157,66 @@ def call_llm(
     content = data["choices"][0]["message"]["content"]
     log.info("同步调用完成: 响应长度=%d", len(content))
     return content
+
+
+async def async_call_llm(
+    system_prompt: str,
+    user_content: str,
+    model: str | None = None,
+    usage_out: dict | None = None,
+    enable_thinking: bool = True,
+) -> str:
+    """异步非流式调用，用于工作流 pipeline 并行场景。"""
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+    body = _build_body(messages, "", model=model, stream=False)
+    if not enable_thinking:
+        body["chat_template_kwargs"] = {"enable_thinking": False}
+    log.info("异步非流式调用: model=%s, 内容长度=%d", body["model"], len(user_content))
+    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=None) as client:
+        resp = await client.post(config.API_URL, headers=_HEADERS, json=body)
+        resp.raise_for_status()
+        data = resp.json()
+        if usage_out is not None and "usage" in data:
+            usage_out.update(data["usage"])
+        content = data["choices"][0]["message"]["content"]
+        log.info("异步调用完成: 响应长度=%d", len(content))
+        return content
+
+
+async def async_stream_llm(
+    system_prompt: str,
+    user_content: str,
+    model: str | None = None,
+    on_token=None,
+) -> str:
+    """异步流式调用，逐 token 通过 on_token(text) 回调，返回完整内容。"""
+    messages = [{"role": "user", "content": user_content}]
+    body = _build_body(messages, system_prompt, model=model, stream=True)
+    log.info("异步流式调用: model=%s, 内容长度=%d", body["model"], len(user_content))
+    content_parts = []
+    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=None) as client:
+        async with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data: "):
+                    continue
+                payload = line[len("data: "):]
+                if payload.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(payload)
+                    choices = chunk.get("choices", [])
+                    if choices:
+                        text = choices[0].get("delta", {}).get("content")
+                        if text:
+                            content_parts.append(text)
+                            if on_token:
+                                on_token(text)
+                except json.JSONDecodeError:
+                    pass
+    full = "".join(content_parts)
+    log.info("异步流式调用完成: 响应长度=%d", len(full))
+    return full
