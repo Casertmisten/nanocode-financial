@@ -12,6 +12,7 @@ from tools import make_schema, run_tool
 import memory.profile as _profile_mod
 import memory.session_memory as _session_mem
 from memory.context import estimate_tokens, _serialize_messages_for_summary
+from intent import classify_intent
 
 
 # --- 三层权限系统 ---
@@ -400,6 +401,49 @@ def main():
             if _handle_slash(user_input, messages):
                 continue
 
+            # ── 意图识别 + 工作流路由 ──
+            intent_result = classify_intent(user_input)
+            routed = False
+
+            if intent_result.intent == "stock_investment":
+                # 个股投资决策工作流
+                import stock_investment
+                print(f"\n{config.CYAN}⏺ 个股投资决策{config.RESET}")
+                print(f"{config.DIM}  意图: {intent_result.intent}, 实体: {intent_result.entities}{config.RESET}\n")
+
+                def _si_progress(step_name, idx, total):
+                    print(f"  {config.DIM}⏺ [{idx}/{total}] {step_name}{config.RESET}")
+
+                report = stock_investment.run(user_input, intent_result.entities, _si_progress)
+                print(f"\n{separator()}")
+                print(report)
+                print(separator())
+                routed = True
+
+            elif intent_result.intent == "sector_rotation":
+                # 行业轮动工作流
+                import sector_rotation
+                print(f"\n{config.CYAN}⏺ 行业轮动与机会发现{config.RESET}")
+                print(f"{config.DIM}  意图: {intent_result.intent}{config.RESET}\n")
+
+                def _sr_progress(step_name, idx, total):
+                    print(f"  {config.DIM}⏺ [{idx}/{total}] {step_name}{config.RESET}")
+
+                report = sector_rotation.run(user_input, intent_result.entities, _sr_progress)
+                print(f"\n{separator()}")
+                print(report)
+                print(separator())
+                routed = True
+
+            elif intent_result.intent == "fra":
+                # FRA 工作流（CLI 模式下直接执行，等同于 /fra 命令）
+                _financial_report_analysis_loop(user_input)
+                routed = True
+
+            if routed:
+                continue
+
+            # ── 通用对话 ──
             messages.append({"role": "user", "content": user_input})
 
             # 注入知识库文档列表到系统提示词

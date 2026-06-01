@@ -86,6 +86,26 @@ def _ingested_tracker_path(chroma_dir: str) -> str:
     return os.path.join(os.path.dirname(chroma_dir), ".ingested.json")
 
 
+def _parents_map_path(chroma_dir: str) -> str:
+    """父 chunk 映射文件路径。"""
+    return os.path.join(os.path.dirname(chroma_dir), ".parents.json")
+
+
+def _load_parents(path: str) -> dict:
+    """加载父 chunk 映射。"""
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def _save_parents(path: str, data: dict):
+    """保存父 chunk 映射。"""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
 def _load_ingested(tracker_path: str) -> dict:
     """加载已摄入文件跟踪器。返回 {文件路径: md5哈希}。"""
     if not os.path.exists(tracker_path):
@@ -164,9 +184,16 @@ def add_to_index(
         return 0
 
     # Split and insert
-    nodes = split_documents(new_docs, chunk_size, chunk_overlap, embed_model=embed_model)
-    index.insert_nodes(nodes)
-    log.info("增量索引完成: %d 个文档, %d 个节点", len(new_docs), len(nodes))
+    child_nodes, parent_map = split_documents(new_docs, chunk_size, chunk_overlap, embed_model=embed_model)
+    index.insert_nodes(child_nodes)
+
+    # 合并并保存父 chunk 映射
+    pp = _parents_map_path(chroma_dir)
+    all_parents = _load_parents(pp)
+    all_parents.update(parent_map)
+    _save_parents(pp, all_parents)
+
+    log.info("增量索引完成: %d 个文档, %d 个子节点, %d 个父节点", len(new_docs), len(child_nodes), len(parent_map))
 
     # Update tracker
     _save_ingested(tracker_path, ingested)
@@ -194,13 +221,17 @@ def build_fresh_index(
     vector_store = ChromaVectorStore(chroma_collection=collection)
 
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    nodes = split_documents(documents, chunk_size, chunk_overlap, embed_model=embed_model)
+    child_nodes, parent_map = split_documents(documents, chunk_size, chunk_overlap, embed_model=embed_model)
 
     index = VectorStoreIndex(
-        nodes=nodes,
+        nodes=child_nodes,
         storage_context=storage_context,
         embed_model=embed_model,
     )
+
+    # 保存父 chunk 映射
+    pp = _parents_map_path(chroma_dir)
+    _save_parents(pp, parent_map)
 
     # Save tracker
     tracker_path = _ingested_tracker_path(chroma_dir)
@@ -211,5 +242,5 @@ def build_fresh_index(
             ingested[file_path] = _file_md5(file_path)
     _save_ingested(tracker_path, ingested)
 
-    log.info("全新索引构建完成: %d 个文档, %d 个节点", len(documents), len(nodes))
+    log.info("全新索引构建完成: %d 个文档, %d 个子节点, %d 个父节点", len(documents), len(child_nodes), len(parent_map))
     return index, embed_model, len(documents)

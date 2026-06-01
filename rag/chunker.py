@@ -1,14 +1,23 @@
-"""Text chunking — heading-aware + semantic for Markdown, SentenceSplitter fallback."""
+"""Text chunking — parent-child for Markdown, SentenceSplitter fallback for others.
+Markdown: 先按标题层级切出大 chunk（父），再用句子分割切成小 chunk（子），用于「小 chunk 检索、大 chunk 生成」。
+"""
 
-from llama_index.core.node_parser import MarkdownNodeParser, SemanticSplitterNodeParser, SentenceSplitter
+import config
+from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
 
-# 超过此字符数的标题段落会二次拆分
-_MAX_CHUNK_SIZE = 1500
+# 父 chunk 超长时的兜底字符阈值
+_MAX_PARENT_CHARS = 3000
 
 
-def _needs_sub_split(nodes: list) -> bool:
-    """检查是否有节点超过最大块大小。"""
-    return any(len(n.text) > _MAX_CHUNK_SIZE for n in nodes)
+def _build_parent_map(parent_nodes: list) -> dict:
+    """将父节点列表映射为 {node_id: {text, metadata}}。"""
+    parent_map = {}
+    for node in parent_nodes:
+        parent_map[node.node_id] = {
+            "text": node.text,
+            "metadata": dict(node.metadata),
+        }
+    return parent_map
 
 
 def split_documents(
@@ -16,65 +25,70 @@ def split_documents(
     chunk_size: int = 1024,
     chunk_overlap: int = 100,
     embed_model=None,
-) -> list:
+) -> tuple[list, dict]:
     """按文件类型选择分块策略。
 
-    Markdown → MarkdownNodeParser（按标题层级切分）
-              → SemanticSplitterNodeParser（同层级内语义分块，需 embed_model）
-              → SentenceSplitter 回退（无 embed_model 或单节点超长时）
-    其他文件 → SentenceSplitter（按指定配置分块）
+    Markdown: 标题层级 → 父 chunk → 句子分割 → 子 chunk（带 parent_id）
+    其他文件: SentenceSplitter 常规分块（无父子关系）
+
+    Returns:
+        (child_nodes, parent_map) 元组
+        - child_nodes: 用于向量检索的小 chunk
+        - parent_map: {parent_id: {text, metadata}}，用于生成时提供上下文
     """
     md_parser = MarkdownNodeParser()
-    
-    # Markdown 用的分块器（默认配置）
-    md_sentence_splitter = SentenceSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
+
+    # 父 chunk 兜底分割器（超大段落进一步拆分）
+    parent_splitter = SentenceSplitter(
+        chunk_size=config.PARENT_CHUNK_SIZE,
+        chunk_overlap=config.PARENT_CHUNK_OVERLAP,
     )
-    
-    # 非 Markdown 用的分块器（专用配置）
-    other_sentence_splitter = SentenceSplitter(
-        chunk_size=512,        # token数，不是字符数
-        chunk_overlap=128,     # 重叠部分，保留跨块上下文
-        separator=" ",         # 分隔符
-        paragraph_separator="\n\n\n",  # 段落边界优先
-        secondary_chunking_regex="[^,.;]+[,.;]?",  # 子句级回退
+
+    # 子 chunk 分割器（句子级）
+    child_splitter = SentenceSplitter(
+        chunk_size=config.CHILD_CHUNK_SIZE,
+        chunk_overlap=config.CHILD_CHUNK_OVERLAP,
+    )
+
+    # 非 Markdown 分块器
+    other_splitter = SentenceSplitter(
+        chunk_size=512,
+        chunk_overlap=128,
+        separator=" ",
+        paragraph_separator="\n\n\n",
+        secondary_chunking_regex="[^,.;]+[,.;]?",
     )
 
     md_docs = [d for d in documents if _is_markdown(d)]
     other_docs = [d for d in documents if not _is_markdown(d)]
 
-    nodes = []
+    all_children = []
+    parent_map = {}
 
-    # Markdown: 标题层级分块 + 语义二次分块
+    # ── Markdown: 父子切割 ──
     if md_docs:
-        md_nodes = md_parser.get_nodes_from_documents(md_docs)
+        # 1. 按标题层级切出父 chunk
+        parent_nodes = md_parser.get_nodes_from_documents(md_docs)
 
-        if embed_model is not None:
-            # 同层级内按语义相似度二次切分
-            semantic_parser = SemanticSplitterNodeParser(
-                embed_model=embed_model,
-                buffer_size=1,
-                breakpoint_percentile_threshold=95,
-            )
-            md_nodes = semantic_parser.build_semantic_nodes_from_nodes(md_nodes)
-        elif _needs_sub_split(md_nodes):
-            # 无嵌入模型时回退到句子切分
-            md_nodes = md_sentence_splitter(md_nodes)
+        # 2. 超长父 chunk 兜底拆分
+        if any(len(n.text) > _MAX_PARENT_CHARS for n in parent_nodes):
+            parent_nodes = parent_splitter(parent_nodes)
 
-        # 语义分块后仍可能有超长节点，兜底拆分
-        if _needs_sub_split(md_nodes):
-            md_nodes = md_sentence_splitter(md_nodes)
+        # 3. 建立父 chunk 映射
+        parent_map = _build_parent_map(parent_nodes)
 
-        nodes.extend(md_nodes)
+        # 4. 将每个父 chunk 句子分割成子 chunk
+        for parent_node in parent_nodes:
+            children = child_splitter([parent_node])
+            for child in children:
+                child.metadata["parent_id"] = parent_node.node_id
+            all_children.extend(children)
 
-    # 非 Markdown: 使用专用配置
+    # ── 非 Markdown: 常规分块（无父子关系）──
     if other_docs:
-        nodes.extend(
-            other_sentence_splitter.get_nodes_from_documents(other_docs)
-        )
+        all_children.extend(other_splitter.get_nodes_from_documents(other_docs))
 
-    return nodes
+    return all_children, parent_map
 
 
 def _is_markdown(doc) -> bool:

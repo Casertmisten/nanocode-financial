@@ -17,6 +17,7 @@ from api.fra import router as fra_router
 from api.research import router as research_router
 from api.token_stats import router as token_stats_router
 from utils import BaseLogger
+import config
 
 log = BaseLogger.getLogger("web")
 
@@ -68,16 +69,52 @@ async def index():
     return RedirectResponse(url="/chat.html")
 
 
-# 模型列表
+# 模型列表（启动时从 API 拉取一次，缓存到内存）
+_cached_models: list[dict] = []
+
+
+def _fetch_models():
+    """启动时从 API 获取可用模型列表。"""
+    global _cached_models
+    import httpx
+    try:
+        # API_URL 可能包含 /chat/completions 等路径，截取到 base url
+        base = config.API_URL.rstrip("/")
+        for suffix in ("/chat/completions", "/v1/chat/completions"):
+            if base.endswith(suffix):
+                base = base[:-len(suffix)]
+        models_url = f"{base.rstrip('/')}/models"
+
+        resp = httpx.get(
+            models_url,
+            headers={"Authorization": f"Bearer {config.API_KEY}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data.get("data", [])
+        _cached_models = [
+            {
+                "id": m["id"],
+                "name": m["id"],
+                "provider": m.get("owned_by", ""),
+            }
+            for m in items
+        ]
+        # 按模型名排序
+        _cached_models.sort(key=lambda x: x["id"])
+        print(f"已加载 {_cached_models.__len__()} 个模型")
+    except Exception as e:
+        print(f"获取模型列表失败: {e}，使用空列表")
+
+
+# 启动时拉取
+_fetch_models()
+
+
 @app.get("/api/models")
 async def list_models():
-    return [
-        {"id": "qwen3.5-35b-a3b", "name": "Qwen3.5-35b-a3b", "provider": "阿里巴巴"},
-        {"id": "qwen-plus", "name": "Qwen-Plus", "provider": "阿里巴巴"},
-        {"id": "qwen3.6-flash", "name": "Qwen3.6-Flash", "provider": "阿里巴巴"},
-        {"id": "deepseek-v4-pro", "name": "DeepSeek-V4-Pro", "provider": "DeepSeek"},
-        {"id": "deepseek-v4-flash", "name": "DeepSeek-V4-Flash", "provider": "DeepSeek"},
-    ]
+    return _cached_models
 
 
 # 知识库列表（从文档表聚合分类 + 文档明细）

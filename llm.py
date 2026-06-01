@@ -135,6 +135,7 @@ def call_llm(
     user_content: str,
     model: str | None = None,
     usage_out: dict | None = None,
+    enable_thinking: bool = True,
 ) -> str:
     """同步非流式调用，用于 FRA pipeline 等场景。返回 response text content。"""
     messages = [
@@ -142,7 +143,12 @@ def call_llm(
         {"role": "user", "content": user_content},
     ]
     body = _build_body(messages, "", model=model, stream=False)
-    log.info("同步非流式调用: model=%s, 内容长度=%d", body["model"], len(user_content))
+    if not enable_thinking:
+        body["chat_template_kwargs"] = {"enable_thinking": False}
+        log.info("禁用思考模式")
+    else:
+        log.info("启用思考模式")
+    log.info("同步非流式调用: model=%s, 内容长度=%d, 思考模式=%s", body["model"], len(user_content), enable_thinking)
     resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=_TIMEOUT, proxy=None)
     resp.raise_for_status()
     data = resp.json()

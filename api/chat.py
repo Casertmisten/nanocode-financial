@@ -15,6 +15,8 @@ from prompts.main_prompts import system_prompt as _SYSTEM_PROMPT_TEMPLATE
 from utils import BaseLogger
 import memory as memory_module
 import asyncio
+from intent import classify_intent
+from intent.schemas import IntentResult
 
 log = BaseLogger.getLogger("chat")
 
@@ -30,6 +32,63 @@ class ChatRequest(BaseModel):
     message: str
     model: str | None = None
     doc_ids: list[int] | None = None
+    pro_mode: bool = False
+
+
+# FRA 守门：检查选中的文档中是否包含财报或研报
+_FRA_REQUIRED_TAGS = {"financial", "report"}
+
+
+async def _has_financial_docs(doc_ids: list[int] | None) -> bool:
+    """检查 doc_ids 中是否包含财报或研报类文档。"""
+    if not doc_ids:
+        return False
+    for did in doc_ids:
+        doc = await db.get_document(did)
+        if not doc:
+            continue
+        tags = doc.get("tags", "[]")
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+        if any(t in _FRA_REQUIRED_TAGS for t in tags):
+            return True
+    return False
+
+
+async def _run_workflow_stream(
+    workflow_name: str,
+    workflow_fn,
+    query: str,
+    entities: dict,
+    session_id: str,
+) -> AsyncIterator[str]:
+    """在工作流线程中执行同步工作流，通过 SSE 流式推送进度和结果。"""
+    import stock_investment.prompts as si_prompts
+    import sector_rotation.prompts as sr_prompts
+
+    # 选择正确的步骤名称映射
+    if workflow_name == "stock_investment":
+        step_names = si_prompts.STEP_NAMES
+    elif workflow_name == "sector_rotation":
+        step_names = sr_prompts.STEP_NAMES
+    else:
+        step_names = {}
+
+    total = len(step_names)
+
+    def progress_cb(step_name: str, idx: int, total_steps: int):
+        """进度回调——将进度信息通过队列传递。"""
+        pass  # 进度通过 yield 推送，这里不做操作
+
+    # 在线程中执行工作流
+    def _exec():
+        return workflow_fn(query, entities=entities)
+
+    result = await asyncio.to_thread(_exec)
+    return result
 
 
 def _sse(event: str, data: dict) -> str:
@@ -281,14 +340,86 @@ async def chat(req: ChatRequest):
         message_id = None
         turn_system_prompt = await _build_system_prompt(memory_injection)
 
-        async for event_type, data in _agentic_loop(
-            llm_messages, req.model, doc_filepaths, req.session_id,
-            system_prompt=turn_system_prompt,
-        ):
-            if event_type == "final":
-                message_id = data.get("message_id")
-                continue
-            yield _sse(event_type, data)
+        # ── 专业模式：意图识别 + 工作流路由 ──
+        routed = False
+
+        if req.pro_mode:
+            intent_result = classify_intent(req.message)
+            log.info("意图识别: intent=%s, entities=%s", intent_result.intent, intent_result.entities)
+
+            if intent_result.intent == "stock_investment":
+                # 个股投资决策工作流
+                import stock_investment
+                yield _sse("workflow_start", {"workflow": "stock_investment", "label": "个股投资决策"})
+
+                def _progress(step_name, idx, total):
+                    pass  # 进度暂不通过 SSE 推送，工作流完成后一次性返回
+
+                report = await asyncio.to_thread(
+                    stock_investment.run, req.message,
+                    intent_result.entities, _progress,
+                )
+                yield _sse("token", {"content": report})
+                # 保存工作流结果为 assistant 消息
+                if req.session_id:
+                    try:
+                        _, msg_id = await db.add_message(req.session_id, "assistant", report), None
+                    except Exception:
+                        pass
+                routed = True
+
+            elif intent_result.intent == "sector_rotation":
+                # 行业轮动工作流
+                import sector_rotation
+                yield _sse("workflow_start", {"workflow": "sector_rotation", "label": "行业轮动与机会发现"})
+
+                def _progress(step_name, idx, total):
+                    pass
+
+                report = await asyncio.to_thread(
+                    sector_rotation.run, req.message,
+                    intent_result.entities, _progress,
+                )
+                yield _sse("token", {"content": report})
+                if req.session_id:
+                    try:
+                        await db.add_message(req.session_id, "assistant", report)
+                    except Exception:
+                        pass
+                routed = True
+
+            elif intent_result.intent == "fra":
+                # FRA 工作流：需要检查是否勾选了财报/研报文档
+                has_docs = await _has_financial_docs(req.doc_ids)
+                if has_docs:
+                    import financial_report_analysis
+                    yield _sse("workflow_start", {"workflow": "fra", "label": "财报深度分析"})
+
+                    report = await asyncio.to_thread(
+                        financial_report_analysis.run, req.message,
+                    )
+                    yield _sse("token", {"content": report})
+                    if req.session_id:
+                        try:
+                            await db.add_message(req.session_id, "assistant", report)
+                        except Exception:
+                            pass
+                    routed = True
+                else:
+                    # 未勾选财报/研报文档，回退到通用对话
+                    log.info("FRA 意图但未勾选财报文档，回退到通用对话")
+                    routed = False
+
+        if not routed:
+            # 通用对话：走原有 agentic loop
+            async for event_type, data in _agentic_loop(
+                llm_messages, req.model, doc_filepaths, req.session_id,
+                system_prompt=turn_system_prompt,
+            ):
+                if event_type == "final":
+                    message_id = data.get("message_id")
+                    continue
+                yield _sse(event_type, data)
 
         log.info("对话完成: session=%s, message_id=%s", req.session_id, message_id)
 

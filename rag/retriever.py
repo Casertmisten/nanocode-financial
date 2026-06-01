@@ -18,6 +18,16 @@ from utils import BaseLogger
 
 log = BaseLogger.getLogger("rag.retriever")
 
+
+def _load_parent_map() -> dict:
+    """加载父 chunk 映射。"""
+    pp = os.path.join(os.path.dirname(config.CHROMA_PERSIST_DIR), ".parents.json")
+    if not os.path.exists(pp):
+        return {}
+    with open(pp, "r") as f:
+        return json.load(f)
+
+
 # 每路独立召回数量
 _RECALL_PER_CHANNEL = 200
 # RRF 融合后保留条数
@@ -82,6 +92,40 @@ def _rrf_fuse(vector_results: dict, bm25_results: dict, k: int = 60) -> dict[str
         fused[nid] = 0.7 / (k + v_rank) + 0.3 / (k + b_rank)
     log.info("RRF 融合: 向量=%d, BM25=%d, 融合=%d", len(vector_results), len(bm25_results), len(fused))
     return fused
+
+
+def _map_to_parents(results: list[dict]) -> list[dict]:
+    """将子 chunk 映射到父 chunk：按 parent_id 去重，返回父 chunk 文本。
+
+    有 parent_id 的子 chunk → 替换为父 chunk 文本（同 parent_id 仅保留得分最高的一个）。
+    无 parent_id 的（非 Markdown）→ 保持不变。
+    """
+    parent_ids = {r["parent_id"] for r in results if r.get("parent_id")}
+    if not parent_ids:
+        return results
+
+    parent_map = _load_parent_map()
+    if not parent_map:
+        return results
+
+    final = []
+    seen = set()
+    for r in results:
+        pid = r.get("parent_id", "")
+        if pid and pid in parent_map:
+            if pid in seen:
+                continue
+            seen.add(pid)
+            final.append({
+                "text": parent_map[pid]["text"],
+                "source": r["source"],
+                "score": r["score"],
+            })
+        else:
+            final.append(r)
+
+    log.info("父子映射: %d 条子 chunk → %d 条（含 %d 个父 chunk）", len(results), len(final), len(seen))
+    return final
 
 
 def _rerank(query: str, documents: list[str], top_n: int) -> list[dict]:
@@ -152,9 +196,11 @@ async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list
 
     id_to_text = {}
     id_to_source = {}
+    id_to_parent_id = {}
     for nid, doc, meta in zip(stored["ids"], stored["documents"], stored["metadatas"]):
         id_to_text[nid] = doc
         id_to_source[nid] = meta.get("file_name", "") if meta else ""
+        id_to_parent_id[nid] = meta.get("parent_id", "") if meta else ""
 
     # 按文件路径过滤（比较不含扩展名的文件名，兼容 PDF→MD 转换）
     if file_paths:
@@ -183,9 +229,10 @@ async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list
                     "text": id_to_text.get(nid, ""),
                     "source": id_to_source.get(nid, "unknown"),
                     "score": round(item.get("score", 0), 4),
+                    "parent_id": id_to_parent_id.get(nid, ""),
                 })
-        log.info("Rerank 检索完成: %d 条结果", len(results))
-        return results
+        log.info("Rerank 检索完成: %d 条子 chunk", len(results))
+        return _map_to_parents(results)
 
     # 无 reranker，用融合分数
     results = []
@@ -194,9 +241,10 @@ async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list
             "text": id_to_text.get(nid, ""),
             "source": id_to_source.get(nid, "unknown"),
             "score": round(fused[nid], 4),
+            "parent_id": id_to_parent_id.get(nid, ""),
         })
-    log.info("混合检索完成（无 rerank）: %d 条结果", len(results))
-    return results
+    log.info("混合检索完成（无 rerank）: %d 条子 chunk", len(results))
+    return _map_to_parents(results)
 
 
 def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None = None, queries: list[str] | None = None) -> list[dict]:

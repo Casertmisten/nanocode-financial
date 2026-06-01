@@ -30,6 +30,12 @@ EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "text-embedding-v3")
 RERANK_API_URL = os.environ.get("RERANK_API_URL", "")
 RERANK_MODEL = os.environ.get("RERANK_MODEL", "")
 
+# --- RAG Chunking ---
+PARENT_CHUNK_SIZE = int(os.environ.get("PARENT_CHUNK_SIZE", "1000"))
+PARENT_CHUNK_OVERLAP = int(os.environ.get("PARENT_CHUNK_OVERLAP", "100"))
+CHILD_CHUNK_SIZE = int(os.environ.get("CHILD_CHUNK_SIZE", "200"))
+CHILD_CHUNK_OVERLAP = int(os.environ.get("CHILD_CHUNK_OVERLAP", "20"))
+
 # --- RAG Paths ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOCUMENTS_DIR = os.environ.get(
@@ -93,6 +99,10 @@ MEMORY_CROSS_SESSION_INJECT_K = int(os.environ.get("MEMORY_CROSS_SESSION_INJECT_
 MEMORY_PROFILE_UPDATE_INTERVAL = int(os.environ.get("MEMORY_PROFILE_UPDATE_INTERVAL", "3"))
 # 会话记忆最小保留轮次（用于控制记忆的保留时间）
 MEMORY_MIN_KEEP_ROUNDS = 5
+
+# --- 意图识别 ---
+# 是否启用 LLM 路由层（正则层始终启用）
+INTENT_USE_LLM = os.environ.get("INTENT_USE_LLM", "true").lower() in ("1", "true", "yes")
 
 # --- Web 服务 ---
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "app.db"))

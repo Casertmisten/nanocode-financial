@@ -378,7 +378,7 @@
       bottom: 100%;
       left: 0;
       width: 340px;
-      max-height: 400px;
+      max-height: 300px;
       margin-bottom: 8px;
       background: var(--color-surface-container-lowest);
       border: 1px solid var(--color-border);
@@ -527,7 +527,8 @@
       position: absolute;
       bottom: 100%;
       left: 0;
-      width: 240px;
+      width: 280px;
+      max-height: 300px;
       margin-bottom: 8px;
       background: var(--color-surface-container-lowest);
       border: 1px solid var(--color-border);
@@ -539,6 +540,14 @@
       transition: all var(--transition-fast);
       z-index: 20;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .model-panel #modelList {
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
     }
 
     .model-panel.active {
@@ -555,6 +564,33 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border-bottom: 1px solid var(--color-border);
+    }
+
+    .model-panel-search {
+      position: relative;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .model-panel-search input {
+      width: 100%;
+      padding: 4px 8px 4px 28px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      background: var(--color-surface);
+      color: var(--color-on-surface);
+      outline: none;
+      box-sizing: border-box;
+    }
+    .model-panel-search input:focus {
+      border-color: var(--color-primary);
+    }
+    .model-panel-search .search-icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      stroke: var(--color-outline);
     }
 
     .model-option {
@@ -594,6 +630,16 @@
       color: var(--color-outline);
     }
 
+    /* 专业模式按钮 */
+    #btnProMode.active {
+      background: var(--color-primary);
+      color: white;
+      border-color: var(--color-primary);
+    }
+    #btnProMode.active svg {
+      stroke: white;
+    }
+
     .chat-input-hint {
       text-align: center;
       font: var(--font-caption);
@@ -602,6 +648,12 @@
       max-width: 760px;
       margin-left: auto;
       margin-right: auto;
+      transition: color 0.2s;
+    }
+
+    .chat-input-hint.pro-active {
+      color: var(--color-primary);
+      font-weight: 500;
     }
 
     /* 移动端汉堡按钮 */
@@ -899,6 +951,12 @@
             <span id="currentModelName">Qwen-Max</span>
           </button>
 
+          <!-- 专业模式 -->
+          <button class="toolbar-btn" id="btnProMode" onclick="toggleProMode()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span>专业模式</span>
+          </button>
+
           <!-- 深度研究开关 -->
           <!-- <button class="toolbar-btn" id="btnDeepResearch" onclick="toggleDeepResearch()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
@@ -920,11 +978,15 @@
           <!-- 模型选择面板 -->
           <div class="model-panel" id="modelPanel">
             <div class="model-panel-title">选择模型</div>
+            <div class="model-panel-search">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="搜索模型..." id="modelSearch" oninput="filterModelList()">
+            </div>
             <div id="modelList"></div>
           </div>
         </div>
 
-        <p class="chat-input-hint">模型基于知识库和公开数据生成，仅供参考，不构成投资建议</p>
+        <p class="chat-input-hint" id="chatInputHint">模型基于知识库和公开数据生成，仅供参考，不构成投资建议</p>
       </div>
     </main>
   </div>
@@ -986,6 +1048,7 @@
     let currentKbTab = 'category';   // 当前 Tab: category | document
     let deepResearchActive = false;  // 深度研究模式
     let drPlanData = null;           // 当前 Plan 数据
+    let proModeActive = false;       // 专业模式
 
     // --- 从 API 加载数据 ---
     let kbCategories = [];
@@ -1164,6 +1227,7 @@
         message: userText,
         model: currentModel,
         doc_ids: getSelectedDocIds(),
+        pro_mode: proModeActive,
       }, {
         onToken: (content) => {
           fullReply += content;
@@ -1454,6 +1518,20 @@
     }
 
     // --- 知识库 & 模型面板 ---
+    function toggleProMode() {
+      proModeActive = !proModeActive;
+      const btn = document.getElementById('btnProMode');
+      btn.classList.toggle('active', proModeActive);
+      const hint = document.getElementById('chatInputHint');
+      if (proModeActive) {
+        hint.textContent = '专业模式已开启：支持个股投资决策 · 行业轮动与机会发现 · 财报深度分析（需指定文档）';
+        hint.classList.add('pro-active');
+      } else {
+        hint.textContent = '模型基于知识库和公开数据生成，仅供参考，不构成投资建议';
+        hint.classList.remove('pro-active');
+      }
+    }
+
     function togglePanel(type) {
       const kbPanel = document.getElementById('kbPanel');
       const modelPanel = document.getElementById('modelPanel');
@@ -1611,15 +1689,23 @@
     }
 
     // --- 模型列表渲染 ---
-    function renderModelList() {
+    function renderModelList(filter = '') {
+      const keyword = filter.toLowerCase();
+      const filtered = keyword
+        ? models.filter(m => m.id.toLowerCase().includes(keyword) || (m.provider || '').toLowerCase().includes(keyword))
+        : models;
       const list = document.getElementById('modelList');
-      list.innerHTML = models.map(m => `
+      list.innerHTML = filtered.map(m => `
         <div class="model-option ${m.id === currentModel ? 'selected' : ''}" onclick="selectModel('${m.id}')">
           <span class="model-check">${m.id === currentModel ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>
           <span class="model-name">${m.name}</span>
           <span class="model-provider">${m.provider}</span>
         </div>
       `).join('');
+    }
+
+    function filterModelList() {
+      renderModelList(document.getElementById('modelSearch').value);
     }
 
     function selectModel(id) {
