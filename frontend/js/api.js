@@ -21,15 +21,22 @@ async function api(method, path, body = null) {
  * @param {function} onToolEnd - 工具结束回调 (tool: string, result: string)
  * @param {function} onWorkflowStep - 工作流步骤回调 (step: string, idx: int, total: int)
  * @param {function} onWorkflowStart - 工作流开始回调 (workflow: string, label: string)
+ * @param {function} onStatus - 状态消息回调 (message: string)
  * @param {function} onDone - 完成回调 (messageId: number)
  * @param {function} onError - 错误回调 (error: Error)
  */
-async function ssePost(path, body, { onToken, onToolStart, onToolEnd, onWorkflowStep, onWorkflowStart, onDone, onError }) {
+async function ssePost(path, body, { onToken, onToolStart, onToolEnd, onWorkflowStep, onWorkflowStart, onStatus, onDone, onError, signal }) {
     const res = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal,
+    }).catch(err => {
+        // AbortError 是用户主动停止，静默处理
+        if (err.name === 'AbortError') return null;
+        throw err;
     });
+    if (!res) return;
 
     if (!res.ok) {
         const text = await res.text();
@@ -41,47 +48,58 @@ async function ssePost(path, body, { onToken, onToolStart, onToolEnd, onWorkflow
     const decoder = new TextDecoder();
     let buffer = '';
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
-        let currentEvent = '';
-        for (const line of lines) {
-            if (line.startsWith('event: ')) {
-                currentEvent = line.slice(7);
-            } else if (line.startsWith('data: ')) {
-                const dataStr = line.slice(6);
-                try {
-                    const data = JSON.parse(dataStr);
-                    switch (currentEvent) {
-                        case 'token':
-                            if (onToken) onToken(data.content);
-                            break;
-                        case 'tool_start':
-                            if (onToolStart) onToolStart(data.tool, data.args);
-                            break;
-                        case 'tool_end':
-                            if (onToolEnd) onToolEnd(data.tool, data.result);
-                            break;
-                        case 'workflow_start':
-                            if (onWorkflowStart) onWorkflowStart(data.workflow, data.label);
-                            break;
-                        case 'workflow_step':
-                            if (onWorkflowStep) onWorkflowStep(data.step, data.idx, data.total);
-                            break;
-                        case 'done':
-                            if (onDone) onDone(data.message_id);
-                            break;
+            let currentEvent = '';
+            for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                    currentEvent = line.slice(7);
+                } else if (line.startsWith('data: ')) {
+                    const dataStr = line.slice(6);
+                    try {
+                        const data = JSON.parse(dataStr);
+                        switch (currentEvent) {
+                            case 'token':
+                                if (onToken) onToken(data.content);
+                                break;
+                            case 'tool_start':
+                                if (onToolStart) onToolStart(data.tool, data.args);
+                                break;
+                            case 'tool_end':
+                                if (onToolEnd) onToolEnd(data.tool, data.result);
+                                break;
+                            case 'workflow_start':
+                                if (onWorkflowStart) onWorkflowStart(data.workflow, data.label);
+                                break;
+                            case 'workflow_step':
+                                if (onWorkflowStep) onWorkflowStep(data.step, data.idx, data.total);
+                                break;
+                            case 'status':
+                                if (onStatus) onStatus(data.message);
+                                break;
+                            case 'error':
+                                if (onError) onError(new Error(data.message || '未知错误'));
+                                break;
+                            case 'done':
+                                if (onDone) onDone(data.message_id);
+                                break;
+                        }
+                    } catch (e) {
+                        // 忽略解析错误
                     }
-                } catch (e) {
-                    // 忽略解析错误
+                    currentEvent = '';
                 }
-                currentEvent = '';
             }
         }
+    } catch (err) {
+        if (err.name === 'AbortError') return; // 用户主动停止
+        if (onError) onError(err);
     }
 }

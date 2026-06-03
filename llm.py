@@ -24,12 +24,13 @@ def _build_body(
     tools: list[dict] | None = None,
     model: str | None = None,
     stream: bool = False,
+    max_tokens: int | None = None,
 ) -> dict:
     """构造请求体。"""
     all_messages = [{"role": "system", "content": system_prompt}] + messages
     body: dict = {
         "model": model or config.MODEL,
-        "max_tokens": config.LLM_MAX_TOKENS,
+        "max_tokens": max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS,
         "messages": all_messages,
         "stream": stream,
     }
@@ -75,10 +76,11 @@ async def async_stream_chat(
     tools: list[dict] | None = None,
     model: str | None = None,
     usage_out: dict | None = None,
+    max_tokens: int | None = None,
 ) -> AsyncIterator[dict]:
     """异步流式迭代器，用于 Web SSE。"""
     # 构造请求体
-    body = _build_body(messages, system_prompt, tools, model, stream=True)
+    body = _build_body(messages, system_prompt, tools, model, stream=True, max_tokens=max_tokens)
     log.info("异步流式调用: model=%s, 消息数=%d", body["model"], len(messages))
     log.info("请求体: %s", body)
     async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=None) as client:

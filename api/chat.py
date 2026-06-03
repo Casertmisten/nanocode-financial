@@ -1,9 +1,10 @@
 """SSE 流式对话 API — 异步 agentic loop + 工具调用。"""
 
 import json
+import httpx
 from typing import AsyncIterator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -33,6 +34,7 @@ class ChatRequest(BaseModel):
     model: str | None = None
     doc_ids: list[int] | None = None
     pro_mode: bool = False
+    retry: bool = False
 
 
 # FRA 守门：检查选中的文档中是否包含财报或研报
@@ -127,49 +129,134 @@ async def _agentic_loop(
     session_id: str | None = None,
     system_prompt: str | None = None,
 ) -> AsyncIterator[tuple[str, dict]]:
-    """异步 agentic loop，yield (event_type, data) 元组。"""
+    """异步 agentic loop，yield (event_type, data) 元组。含错误恢复机制。"""
     tools_schema = tools.make_schema()
     llm_messages = list(messages)
     max_turns = config.AGENT_MAX_TURNS
     _sys = system_prompt or SYSTEM_PROMPT
+    _max_tokens = config.LLM_MAX_TOKENS
 
     for turn in range(max_turns):
         content_parts: list[str] = []
         tool_calls_map: dict[int, dict] = {}
         usage_turn: dict = {}
+        finish_reason: str | None = None
 
-        async for chunk in llm.async_stream_chat(
-            llm_messages, _sys, tools=tools_schema, model=model,
-            usage_out=usage_turn,
-        ):
-            choices = chunk.get("choices", [])
-            if not choices:
-                continue
-            delta = choices[0].get("delta", {})
+        # ── 错误恢复：LLM 调用重试循环 ──
+        _rate_retries = 0
+        _ctx_retries = 0
 
-            text = delta.get("content")
-            if text:
-                content_parts.append(text)
-                yield ("token", {"content": text})
+        while True:
+            try:
+                async for chunk in llm.async_stream_chat(
+                    llm_messages, _sys, tools=tools_schema, model=model,
+                    usage_out=usage_turn, max_tokens=_max_tokens,
+                ):
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    delta = choice.get("delta", {})
 
-            tc_deltas = delta.get("tool_calls")
-            if tc_deltas:
-                for tc in tc_deltas:
-                    idx = tc.get("index", 0)
-                    if idx not in tool_calls_map:
-                        tool_calls_map[idx] = {
-                            "id": tc.get("id", ""),
-                            "type": "function",
-                            "function": {"name": "", "arguments": ""},
-                        }
-                    entry = tool_calls_map[idx]
-                    if tc.get("id"):
-                        entry["id"] = tc["id"]
-                    fn = tc.get("function", {})
-                    if fn.get("name"):
-                        entry["function"]["name"] = fn["name"]
-                    if fn.get("arguments"):
-                        entry["function"]["arguments"] += fn["arguments"]
+                    # 捕获 finish_reason
+                    fr = choice.get("finish_reason")
+                    if fr:
+                        finish_reason = fr
+
+                    text = delta.get("content")
+                    if text:
+                        content_parts.append(text)
+                        yield ("token", {"content": text})
+
+                    tc_deltas = delta.get("tool_calls")
+                    if tc_deltas:
+                        for tc in tc_deltas:
+                            idx = tc.get("index", 0)
+                            if idx not in tool_calls_map:
+                                tool_calls_map[idx] = {
+                                    "id": tc.get("id", ""),
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            entry = tool_calls_map[idx]
+                            if tc.get("id"):
+                                entry["id"] = tc["id"]
+                            fn = tc.get("function", {})
+                            if fn.get("name"):
+                                entry["function"]["name"] = fn["name"]
+                            if fn.get("arguments"):
+                                entry["function"]["arguments"] += fn["arguments"]
+
+                break  # 调用成功，退出重试循环
+
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+
+                # 429 限流：间隔 2 秒重试，最多 5 次
+                if status_code == 429:
+                    _rate_retries += 1
+                    if _rate_retries >= 5:
+                        yield ("error", {"code": 429, "message": "模型限流，请稍后重试"})
+                        return
+                    yield ("status", {"message": f"模型限流，2秒后重试 ({_rate_retries}/5)..."})
+                    await asyncio.sleep(2)
+                    content_parts.clear()
+                    tool_calls_map.clear()
+                    usage_turn.clear()
+                    finish_reason = None
+                    continue
+
+                # 401：API Key 错误，直接终止
+                if status_code == 401:
+                    yield ("error", {"code": 401, "message": "API Key 填写错误，请检查配置"})
+                    return
+
+                # 403：模型欠费或无法使用，直接终止
+                if status_code == 403:
+                    yield ("error", {"code": 403, "message": "模型欠费或无法使用"})
+                    return
+
+                # 400：检查是否为上下文超限
+                if status_code == 400:
+                    err_text = ""
+                    try:
+                        err_text = e.response.text
+                    except Exception:
+                        pass
+                    if any(kw in err_text.lower() for kw in
+                           ("context", "token", "length", "too many", "maximum")):
+                        _ctx_retries += 1
+                        if _ctx_retries > 2:
+                            yield ("error", {"code": "context_overflow",
+                                             "message": "上下文长度超限，压缩后仍无法继续"})
+                            return
+                        yield ("status", {"message": "上下文超限，正在压缩..."})
+                        # 使用已有的压缩逻辑
+                        if session_id:
+                            try:
+                                messages_raw = await db.get_messages(session_id)
+                                compressed, _ = await memory_module.inject_memory(
+                                    session_id, messages_raw, "")
+                                llm_messages = _messages_to_llm_format(compressed)
+                            except Exception:
+                                llm_messages = llm_messages[-10:]
+                        else:
+                            llm_messages = llm_messages[-10:]
+                        content_parts.clear()
+                        tool_calls_map.clear()
+                        usage_turn.clear()
+                        finish_reason = None
+                        continue
+                    yield ("error", {"code": 400, "message": f"请求错误: {err_text[:200]}"})
+                    return
+
+                yield ("error", {"code": status_code, "message": str(e)})
+                return
+
+            except Exception as e:
+                log.warning("LLM 调用异常: %s", e)
+                yield ("error", {"code": "unknown", "message": f"未知错误: {e}"})
+                return
 
         # 流式结束后若 usage 为空，用字符数估算兜底
         if not usage_turn.get("total_tokens"):
@@ -184,6 +271,28 @@ async def _agentic_loop(
                 "completion_tokens": est_output,
                 "total_tokens": estimated + est_output,
             })
+
+        # ── 错误恢复：max_tokens 用完，模型话说一半 ──
+        if finish_reason == "length":
+            if not tool_calls_map:
+                # 纯文本截断：追加已输出内容，让模型继续生成
+                _max_tokens = min(_max_tokens * 2, config.LLM_MAX_TOKENS * 4)
+                partial = "".join(content_parts)
+                if partial:
+                    llm_messages.append({"role": "assistant", "content": partial})
+                    llm_messages.append({"role": "user", "content": "请继续"})
+                yield ("status", {"message": "输出被截断，正在继续生成..."})
+                content_parts.clear()
+                continue
+            else:
+                # 工具调用截断：扩充 max_tokens 重试整个 turn
+                _max_tokens = min(_max_tokens * 2, config.LLM_MAX_TOKENS * 4)
+                yield ("status", {"message": "工具调用被截断，正在重试..."})
+                content_parts.clear()
+                tool_calls_map.clear()
+                usage_turn.clear()
+                finish_reason = None
+                continue
 
         if not tool_calls_map:
             await _record_token_usage(usage_turn, model, session_id)
@@ -266,23 +375,35 @@ async def _agentic_loop(
 
 
 @router.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     """SSE 流式对话接口。"""
-    log.info("收到对话请求: session=%s, model=%s, 消息长度=%d", req.session_id, req.model, len(req.message))
+    log.info("收到对话请求: session=%s, model=%s, retry=%s, 消息长度=%d", req.session_id, req.model, req.retry, len(req.message))
 
     session = await db.get_session(req.session_id)
     if not session:
         raise HTTPException(404, "会话不存在")
 
-    await db.add_message(req.session_id, "user", req.message)
-
-    messages_raw = await db.get_messages(req.session_id)
-    if len(messages_raw) == 1:
-        title = req.message[:30].replace("\n", " ")
-        if len(req.message) > 30:
-            title += "..."
-        await db.update_session(req.session_id, title=title)
-        log.info("新会话自动标题: %s", title)
+    if req.retry:
+        # 重试：删除最后一条用户消息之后的所有消息（assistant/tool），不重复添加用户消息
+        messages_raw = await db.get_messages(req.session_id)
+        last_user = None
+        for m in reversed(messages_raw):
+            if m["role"] == "user":
+                last_user = m
+                break
+        if last_user:
+            deleted = await db.delete_messages_after(req.session_id, last_user["id"])
+            log.info("重试模式: 删除 %d 条旧消息", deleted)
+        messages_raw = await db.get_messages(req.session_id)
+    else:
+        await db.add_message(req.session_id, "user", req.message)
+        messages_raw = await db.get_messages(req.session_id)
+        if len(messages_raw) == 1:
+            title = req.message[:30].replace("\n", " ")
+            if len(req.message) > 30:
+                title += "..."
+            await db.update_session(req.session_id, title=title)
+            log.info("新会话自动标题: %s", title)
 
     # 三层记忆注入
     compressed_msgs, memory_injection = await memory_module.inject_memory(
@@ -402,9 +523,15 @@ async def chat(req: ChatRequest):
                     message_id = data.get("message_id")
                     continue
                 yield _sse(event_type, data)
+                # 客户端断开则立即停止
+                if await request.is_disconnected():
+                    log.info("客户端断开，停止生成: session=%s", req.session_id)
+                    break
+            else:
+                log.info("对话完成: session=%s, message_id=%s", req.session_id, message_id)
+                yield _sse("done", {"message_id": message_id})
+            return
 
-        log.info("对话完成: session=%s, message_id=%s", req.session_id, message_id)
-
-        yield _sse("done", {"message_id": message_id})
+        log.info("对话完成(工作流): session=%s", req.session_id)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
