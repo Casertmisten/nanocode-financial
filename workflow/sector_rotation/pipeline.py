@@ -8,7 +8,7 @@ import logging
 
 import llm
 import tools as tools_module
-from sector_rotation.prompts import (
+from workflow.sector_rotation.prompts import (
     MARKET_SYSTEM, MARKET_PROMPT,
     HEAT_SYSTEM, HEAT_PROMPT,
     NEWS_SYSTEM, NEWS_PROMPT,

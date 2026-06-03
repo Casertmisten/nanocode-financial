@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import llm
 import tools as tools_module
 import memory.profile as profile_mod
-from stock_investment.prompts import (
+from workflow.stock_investment.prompts import (
     FUNDAMENTAL_SYSTEM, FUNDAMENTAL_PROMPT,
     VALUATION_SYSTEM, VALUATION_PROMPT,
     NEWS_SYSTEM, NEWS_PROMPT,

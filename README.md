@@ -93,15 +93,10 @@ nanocode-financial/
 │   ├── regex_router.py          # 正则快速路由
 │   └── llm_router.py            # LLM 精准分类
 │
-├── stock_investment/             # 个股投资决策工作流
-│   ├── __init__.py              # 入口
-│   ├── pipeline.py              # 多步分析流水线
-│   └── prompts.py               # 提示词模板
-│
-├── sector_rotation/              # 行业轮动与机会发现
-│   ├── __init__.py              # 入口
-│   ├── pipeline.py              # 行业扫描 + 轮动分析
-│   └── prompts.py               # 提示词模板
+├── workflow/                    # 专业工作流
+│   ├── stock_investment/        # 个股投资决策
+│   ├── sector_rotation/         # 行业轮动与机会发现
+│   └── financial_report_analysis/  # 财报深度分析
 │
 ├── rag/                         # RAG 系统
 │   ├── indexer.py               # ChromaDB 向量索引（增量入库）
@@ -122,10 +117,6 @@ nanocode-financial/
 │   ├── _akshare_stock.py        # AKShare 股票数据实现
 │   ├── _akshare_news.py         # AKShare 新闻数据实现
 │   └── _helpers.py              # 类型转换、市场识别等工具
-│
-├── financial_report_analysis/   # 财报深度分析
-│   ├── pipeline.py              # Map-Reduce 流水线
-│   └── template.py              # 3 维度 33 子问题模板
 │
 ├── deep_research/               # 开放性深度研究
 │   ├── __init__.py              # 入口：plan → execute → generate

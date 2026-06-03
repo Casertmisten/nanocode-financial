@@ -322,12 +322,12 @@ def _run_agentic_loop(messages, system_prompt):
 
 def _financial_report_analysis_loop(query: str):
     """财报分析循环。"""
-    import financial_report_analysis
+    import workflow.financial_report_analysis
 
     print(f"\n{config.YELLOW}⏺ 进入财报分析模式{config.RESET}")
     print(f"{config.DIM}  分析课题: {query}{config.RESET}\n")
 
-    report = financial_report_analysis.run(query)
+    report = workflow.financial_report_analysis.run(query)
 
     # 保存为 Markdown 文件
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -407,14 +407,14 @@ def main():
 
             if intent_result.intent == "stock_investment":
                 # 个股投资决策工作流
-                import stock_investment
+                import workflow.stock_investment
                 print(f"\n{config.CYAN}⏺ 个股投资决策{config.RESET}")
                 print(f"{config.DIM}  意图: {intent_result.intent}, 实体: {intent_result.entities}{config.RESET}\n")
 
                 def _si_progress(step_name, idx, total):
                     print(f"  {config.DIM}⏺ [{idx}/{total}] {step_name}{config.RESET}")
 
-                report = stock_investment.run(user_input, intent_result.entities, _si_progress)
+                report = workflow.stock_investment.run(user_input, intent_result.entities, _si_progress)
                 print(f"\n{separator()}")
                 print(report)
                 print(separator())
@@ -422,14 +422,14 @@ def main():
 
             elif intent_result.intent == "sector_rotation":
                 # 行业轮动工作流
-                import sector_rotation
+                import workflow.sector_rotation
                 print(f"\n{config.CYAN}⏺ 行业轮动与机会发现{config.RESET}")
                 print(f"{config.DIM}  意图: {intent_result.intent}{config.RESET}\n")
 
                 def _sr_progress(step_name, idx, total):
                     print(f"  {config.DIM}⏺ [{idx}/{total}] {step_name}{config.RESET}")
 
-                report = sector_rotation.run(user_input, intent_result.entities, _sr_progress)
+                report = workflow.sector_rotation.run(user_input, intent_result.entities, _sr_progress)
                 print(f"\n{separator()}")
                 print(report)
                 print(separator())

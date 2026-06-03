@@ -13,7 +13,7 @@ from prompts.financial_report_analysis import (
     reduce_prompt,
     reduce_system_prompt,
 )
-from financial_report_analysis.template import DIMENSIONS
+from workflow.financial_report_analysis.template import DIMENSIONS
 
 log = logging.getLogger(__name__)
 

@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/fra", tags=["fra"])
 
 async def _run_fra_stream(query: str, session_id: str | None = None):
     """执行 FRA 流程，逐阶段 SSE 推送。"""
-    from financial_report_analysis.template import DIMENSIONS
+    from workflow.financial_report_analysis.template import DIMENSIONS
     import rag
 
     _TOP_K = 3

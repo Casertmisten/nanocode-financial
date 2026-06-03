@@ -483,18 +483,18 @@ async def chat(req: ChatRequest, request: Request):
             log.info("意图识别: intent=%s, entities=%s", intent_result.intent, intent_result.entities)
 
             if intent_result.intent == "stock_investment":
-                import stock_investment
+                import workflow.stock_investment
                 async for sse_str in _run_workflow_and_drain(
-                    stock_investment.run, "stock_investment", "个股投资决策",
+                    workflow.stock_investment.run, "stock_investment", "个股投资决策",
                     entities=intent_result.entities,
                 ):
                     yield sse_str
                 routed = True
 
             elif intent_result.intent == "sector_rotation":
-                import sector_rotation
+                import workflow.sector_rotation
                 async for sse_str in _run_workflow_and_drain(
-                    sector_rotation.run, "sector_rotation", "行业轮动与机会发现",
+                    workflow.sector_rotation.run, "sector_rotation", "行业轮动与机会发现",
                     entities=intent_result.entities,
                 ):
                     yield sse_str
@@ -503,9 +503,9 @@ async def chat(req: ChatRequest, request: Request):
             elif intent_result.intent == "fra":
                 has_docs = await _has_financial_docs(req.doc_ids)
                 if has_docs:
-                    import financial_report_analysis
+                    import workflow.financial_report_analysis
                     async for sse_str in _run_workflow_and_drain(
-                        financial_report_analysis.run, "fra", "财报深度分析",
+                        workflow.financial_report_analysis.run, "fra", "财报深度分析",
                     ):
                         yield sse_str
                     routed = True
