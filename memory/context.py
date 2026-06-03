@@ -89,8 +89,12 @@ def _serialize_messages_for_summary(messages: list[dict]) -> str:
 async def compress_if_needed(session_id: str, messages: list[dict]) -> list[dict]:
     """检查 token 预算，超限时压缩最早的消息。
 
+    原始消息保留在数据库，摘要作为标记插入 messages 表。
+    传给 LLM 时以最后一个 [对话摘要] 为起点（之前的消息被截断）。
+    多次压缩时自动合并旧摘要，保证 LLM 始终拿到完整的压缩上下文。
+
     Returns:
-        压缩后的消息列表（可能包含摘要替代原始消息）
+        压缩后的消息列表（从最后一个摘要开始）
     """
     max_tokens = config.MEMORY_SESSION_MAX_TOKENS
     compress_rounds = config.MEMORY_COMPRESS_ROUNDS
@@ -98,41 +102,33 @@ async def compress_if_needed(session_id: str, messages: list[dict]) -> list[dict
 
     result = list(messages)
 
-    # 加载已有摘要
-    existing_summaries = await db.get_session_summaries(session_id)
-    summarized_ranges = set()
-    for s in existing_summaries:
-        summarized_ranges.add((s["start_msg_id"], s["end_msg_id"]))
+    # 截断：只保留最后一个摘要及其之后的消息（跳过已被压缩的历史）
+    last_summary_idx = -1
+    for i, msg in enumerate(result):
+        if msg.get("role") == "system" and (msg.get("content") or "").startswith("[对话摘要]"):
+            last_summary_idx = i
+    if last_summary_idx > 0:
+        result = result[last_summary_idx:]
 
     while estimate_tokens(result) > max_tokens:
         if _count_rounds(result) <= min_keep_rounds:
             log.warning("会话消息已达最小保留轮数，停止压缩: session=%s", session_id)
             break
 
-        # 找出最早的 N 轮对话（跳过已被摘要的和 system 消息）
+        # 找出最早的 N 轮对话（system 消息保留不压缩）
         to_compress = []
         remaining = []
         round_count = 0
         in_round = False
 
         for msg in result:
-            msg_id = msg.get("id")
-
-            # 如果这条消息已被摘要覆盖，跳过
-            if msg_id and any(start <= msg_id <= end for start, end in summarized_ranges):
-                continue
-
-            # 不压缩 system 角色消息
             if msg.get("role") == "system":
                 remaining.append(msg)
                 continue
-
             if round_count < compress_rounds:
                 to_compress.append(msg)
-                # user 消息开始一轮
                 if msg.get("role") == "user":
                     in_round = True
-                # assistant 消息结束一轮
                 if in_round and msg.get("role") == "assistant":
                     round_count += 1
                     in_round = False
@@ -143,26 +139,30 @@ async def compress_if_needed(session_id: str, messages: list[dict]) -> list[dict
             log.info("无可压缩的消息: session=%s", session_id)
             break
 
+        # 合并已有摘要：将 remaining 中的旧摘要内容纳入本次压缩
+        existing_summary = None
+        for msg in list(remaining):
+            if msg.get("role") == "system" and (msg.get("content") or "").startswith("[对话摘要]"):
+                existing_summary = msg["content"]
+                remaining.remove(msg)
+                break
+
         # 生成摘要
         text = _serialize_messages_for_summary(to_compress)
+        if existing_summary:
+            text = existing_summary + "\n\n---\n以下是新发生的对话：\n" + text
         try:
             summary = llm.call_llm("你是一个对话压缩助手。", COMPRESS_PROMPT.format(messages=text))
         except Exception:
             log.warning("压缩摘要生成失败，停止压缩", exc_info=True)
             break
 
-        # 保存摘要到数据库
-        start_id = min((m.get("id", 0) for m in to_compress if m.get("id")), default=0)
-        end_id = max((m.get("id", 0) for m in to_compress if m.get("id")), default=0)
-        await db.add_session_summary(session_id, start_id, end_id, summary)
-        summarized_ranges.add((start_id, end_id))
+        # 写入摘要消息（原始消息不删除，保留完整历史）
+        if session_id:
+            await db.add_message(session_id, "system", f"[对话摘要] {summary}")
+            log.info("会话压缩: session=%s, 压缩 %d 轮, 摘要长度=%d", session_id, round_count, len(summary))
 
-        # 用摘要消息替代被压缩的消息
-        summary_msg = {
-            "role": "system",
-            "content": f"[对话摘要] {summary}",
-        }
+        summary_msg = {"role": "system", "content": f"[对话摘要] {summary}"}
         result = [summary_msg] + remaining
-        log.info("会话压缩完成: session=%s, 压缩 %d 轮, 摘要长度=%d", session_id, round_count, len(summary))
 
     return result

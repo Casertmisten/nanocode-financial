@@ -183,6 +183,38 @@
       border-left: 3px solid var(--color-success);
     }
 
+    .message-compressed {
+      display: flex;
+      justify-content: center;
+      padding: var(--stack-sm) 0;
+    }
+    .compressed-hint {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8em;
+      color: var(--color-on-surface-variant);
+      background: var(--color-surface-container-lowest);
+      border: 1px dashed var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 6px 14px;
+      cursor: default;
+    }
+    .compressed-hint summary {
+      cursor: pointer;
+      color: var(--color-primary);
+      font-size: 0.9em;
+      margin-left: 4px;
+    }
+    .compressed-detail {
+      margin-top: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 0.85em;
+      color: var(--color-on-surface-variant);
+      line-height: 1.6;
+    }
+
     .message-meta {
       display: flex;
       align-items: center;
@@ -198,13 +230,9 @@
 
     .message-actions {
       display: flex;
+      align-items: center;
       gap: 4px;
-      margin-top: 8px;
-      opacity: 0;
-      transition: opacity var(--transition-fast);
-    }
-
-    .message:hover .message-actions {
+      margin-top: 4px;
       opacity: 1;
     }
 
@@ -372,6 +400,39 @@
       background: var(--color-surface-container);
       color: var(--color-outline);
       cursor: default;
+    }
+
+    /* 停止按钮 — 生成中替代发送按钮 */
+    .btn-stop {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius);
+      background: var(--color-error);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all var(--transition-fast);
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-stop:hover {
+      opacity: 0.85;
+    }
+
+    /* 停止/出错提示标签 */
+    .stop-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 6px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--color-surface-container);
+      font-size: 12px;
+      color: var(--color-outline);
     }
 
     /* 工具栏（知识库/模型选择） */
@@ -988,6 +1049,9 @@
           <button class="btn-send" id="btnSend" onclick="sendMessage()" disabled>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
+          <button class="btn-stop" id="btnStop" onclick="stopGeneration()" style="display:none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+          </button>
         </div>
 
         <!-- 工具栏：知识库 & 模型选择 -->
@@ -1103,6 +1167,8 @@
     let deepResearchActive = false;  // 深度研究模式
     let drPlanData = null;           // 当前 Plan 数据
     let proModeActive = false;       // 专业模式
+    let currentAbortController = null; // 当前 SSE 流的中断控制器
+    let lastUserMessage = null;      // 上条用户消息，供重试使用
 
     // --- 从 API 加载数据 ---
     let kbCategories = [];
@@ -1214,15 +1280,41 @@
     }
 
     function renderMessages() {
-      messagesContainer.innerHTML = messages.map(msg => {
+      messagesContainer.innerHTML = messages.map((msg, i) => {
         const time = msg.time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        // 压缩摘要提示
+        if (msg.role === 'compressed') {
+          return `
+            <div class="message message-compressed">
+              <div class="compressed-hint">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span>以上对话已压缩为摘要</span>
+                <details><summary>查看摘要</summary><div class="compressed-detail">${marked.parse(msg.content)}</div></details>
+              </div>
+            </div>`;
+        }
         if (msg.role === 'user') {
+          const userActions = [];
+          // 最后一条用户消息 → 显示重试（不论后面有没有助手回复）
+          const isLastUserMsg = i === messages.length - 1 || !messages.slice(i + 1).some(m => m.role === 'user');
+          if (isLastUserMsg) {
+            userActions.push(`<button class="message-action-btn" style="color:var(--color-primary);" onclick="retryLastMessage()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              重新生成</button>`);
+          }
           return `
             <div class="message message-user">
               <div class="message-avatar">我</div>
               <div class="message-body">
                 <div class="message-content">${escapeHtml(msg.content)}</div>
-                <div class="message-meta"><span>${time}</span></div>
+                <div class="message-actions">
+                  <span class="message-meta" style="margin-top:0;margin-right:auto;">${time}</span>
+                  ${userActions.join('')}
+                  <button class="message-action-btn" onclick="copyMessage(this, '${escapeAttr(msg.content)}')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    复制
+                  </button>
+                </div>
               </div>
             </div>`;
         }
@@ -1231,6 +1323,16 @@
         const contentHtml = isHtml ? raw : marked.parse(raw);
         const toolchainHtml = msg.toolCalls && msg.toolCalls.length
           ? renderToolchainHtml(msg.toolCalls) : '';
+        // 停止/出错提示
+        let statusHtml = '';
+        if (msg._stopped) statusHtml = '<div class="stop-indicator">⏹ 已停止生成</div>';
+        else if (msg._error) statusHtml = `<div class="stop-indicator" style="color:var(--color-error);">生成出错：${escapeHtml(msg._error)}</div>`;
+        // 操作按钮
+        const actions = [];
+        actions.push(`<button class="message-action-btn" onclick="copyMessage(this, '${escapeAttr(raw)}')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          复制</button>`);
+        const actionsStyle = (msg._stopped || msg._error) ? ' style="opacity:1"' : '';
         return `
           <div class="message message-assistant">
             <div class="message-avatar">
@@ -1239,25 +1341,26 @@
             <div class="message-body">
               ${toolchainHtml}
               <div class="message-content">${contentHtml}</div>
-              <div class="message-meta">
-                <span>${time}</span>
-              </div>
-              <div class="message-actions">
-                <button class="message-action-btn" onclick="copyMessage(this, '${escapeAttr(raw)}')">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  复制
-                </button>
+              ${statusHtml}
+              <div class="message-actions"${actionsStyle}>
+                <span class="message-meta" style="margin-top:0;margin-right:auto;">${time}</span>
+                ${actions.join('')}
               </div>
             </div>
           </div>`;
       }).join('');
     }
 
-    async function simulateReply(userText) {
+    async function simulateReply(userText, isRetry = false) {
       if (!currentChatId) {
         await newChat();
       }
       isLoading = true;
+      lastUserMessage = userText;
+      updateSendStopButtons(true);
+
+      // 创建中断控制器
+      currentAbortController = new AbortController();
 
       // 显示打字指示器
       const typingEl = document.createElement('div');
@@ -1278,13 +1381,17 @@
 
       let wfState = null; // 工作流进度状态 {label, total, currentIdx, el}
 
-      ssePost('/chat', {
+      const reqBody = {
         session_id: currentChatId,
         message: userText,
         model: currentModel,
         doc_ids: getSelectedDocIds(),
         pro_mode: proModeActive,
-      }, {
+        retry: isRetry,
+      };
+      console.log('[chat] retry:', isRetry, 'session:', currentChatId);
+      await ssePost('/chat', reqBody, {
+        signal: currentAbortController.signal,
         onWorkflowStart: (workflow, label) => {
           // 替换 typing indicator 为工作流进度
           typingEl.innerHTML = `
@@ -1389,13 +1496,39 @@
           }
           typingEl.remove();
           isLoading = false;
+          currentAbortController = null;
+          updateSendStopButtons(false);
+          renderMessages();
         },
         onError: (err) => {
           typingEl.remove();
-          addMessage('assistant', '抱歉，回复时出现错误：' + err.message);
+          if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+            messages[messages.length - 1]._finished = true;
+            messages[messages.length - 1]._error = err.message;
+          } else {
+            addMessage('assistant', '抱歉，回复时出现错误：' + err.message);
+            messages[messages.length - 1]._error = err.message;
+          }
           isLoading = false;
+          currentAbortController = null;
+          updateSendStopButtons(false);
+          renderMessages();
         },
       });
+
+      // ssePost 返回后（正常完成或被中止）
+      if (isLoading) {
+        // 被用户中止：onDone/onError 不会被调用
+        typingEl.remove();
+        if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') {
+          messages[messages.length - 1]._stopped = true;
+          messages[messages.length - 1]._finished = true;
+        }
+        isLoading = false;
+        currentAbortController = null;
+        updateSendStopButtons(false);
+        renderMessages();
+      }
     }
 
     // 更新工具链 DOM（增量刷新）
@@ -1413,6 +1546,46 @@
         tmp.innerHTML = html;
         bodyEl.insertBefore(tmp.firstElementChild, contentEl);
       }
+    }
+
+    // --- 停止 / 重试 ---
+
+    /** 切换发送/停止按钮显隐 */
+    function updateSendStopButtons(loading) {
+      const btnSend = document.getElementById('btnSend');
+      const btnStop = document.getElementById('btnStop');
+      if (loading) {
+        btnSend.style.display = 'none';
+        btnStop.style.display = 'flex';
+      } else {
+        btnStop.style.display = 'none';
+        btnSend.style.display = 'flex';
+        btnSend.disabled = document.getElementById('chatInput').value.trim() === '';
+      }
+    }
+
+    /** 停止当前生成 */
+    function stopGeneration() {
+      if (currentAbortController) {
+        currentAbortController.abort();
+      }
+    }
+
+    /** 重试：删除最后用户消息之后的所有消息，重新生成 */
+    function retryLastMessage() {
+      if (isLoading) return;
+      // 找到最后一条用户消息
+      let lastUserIdx = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') { lastUserIdx = i; break; }
+      }
+      if (lastUserIdx < 0) return;
+      const retryText = messages[lastUserIdx].content;
+      // 删除该用户消息之后的所有消息
+      messages.length = lastUserIdx + 1;
+      renderMessages();
+      scrollToBottom();
+      simulateReply(retryText, true);
     }
 
     // --- 对话管理 ---
@@ -1523,6 +1696,13 @@
         messagesContainer.innerHTML = '';
 
         for (const m of (data.messages || [])) {
+          // system 角色的摘要消息标记为 _compressed，渲染时特殊处理
+          if (m.role === 'system' && m.content && m.content.startsWith('[对话摘要]')) {
+            messages.push({ role: 'compressed', content: m.content.replace('[对话摘要]', '').trim(), time: new Date(m.created_at) });
+            continue;
+          }
+          // 其他 system 消息跳过
+          if (m.role === 'system') continue;
           messages.push({ role: m.role, content: m.content, time: new Date(m.created_at), tool_calls_str: m.tool_calls });
         }
         // 合并 agentic loop 产生的 assistant→tool→assistant 序列

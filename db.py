@@ -333,6 +333,31 @@ async def get_messages(session_id: str, limit: int = 100) -> list[dict]:
         return [_row_to_dict(r) for r in rows]
 
 
+async def delete_messages_after(session_id: str, after_message_id: int) -> int:
+    """删除指定消息 ID 之后（不含该消息）的所有消息，返回删除条数。"""
+    async with get_db() as db:
+        cursor = await db.execute(
+            "DELETE FROM messages WHERE session_id = ? AND id > ?",
+            (session_id, after_message_id),
+        )
+        await db.commit()
+        return cursor.rowcount
+
+
+async def delete_messages_by_ids(session_id: str, ids: list[int]) -> int:
+    """删除指定 ID 列表的消息，返回删除条数。"""
+    if not ids:
+        return 0
+    placeholders = ",".join("?" for _ in ids)
+    async with get_db() as db:
+        cursor = await db.execute(
+            f"DELETE FROM messages WHERE session_id = ? AND id IN ({placeholders})",
+            [session_id] + ids,
+        )
+        await db.commit()
+        return cursor.rowcount
+
+
 # ---------------------------------------------------------------------------
 # Documents CRUD
 # ---------------------------------------------------------------------------
