@@ -7,7 +7,23 @@ import dotenv
 dotenv.load_dotenv()
 
 # --- LLM API ---
-API_URL = os.environ.get("ALI_API_URL", "")
+def _normalize_chat_url(url: str) -> str:
+    """规范化 LLM Chat Completions endpoint。
+
+    兼容两种配置写法：
+    - base URL（如 .../v1）：自动补全为 .../v1/chat/completions
+    - 完整 endpoint（已含 /chat/completions）：原样使用（去除多余尾斜杠）
+    空值原样返回，交由调用层报错。
+    """
+    if not url:
+        return url
+    stripped = url.rstrip("/")
+    if stripped.endswith("/chat/completions"):
+        return stripped
+    return f"{stripped}/chat/completions"
+
+
+API_URL = _normalize_chat_url(os.environ.get("ALI_API_URL", ""))
 API_KEY = os.environ.get("ALI_API_KEY", "")
 MODEL = os.environ.get("ALI_MODEL", "deepseek-v4-flash")
 LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "8192"))
@@ -122,5 +138,11 @@ BLUE, CYAN, GREEN, YELLOW, RED = (
 LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY", "")
 LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
 LANGFUSE_BASE_URL = os.environ.get("LANGFUSE_BASE_URL", "https://api.langfuse.com")
+# 是否启用 Langfuse 监控（关闭后所有追踪/上报变为 no-op，不影响业务逻辑）
+LANGFUSE_ENABLED = os.environ.get("LANGFUSE_ENABLED", "true").lower() in ("1", "true", "yes")
 # Langfuse SDK 读取 LANGFUSE_HOST 环境变量
 os.environ.setdefault("LANGFUSE_HOST", LANGFUSE_BASE_URL)
+# Langfuse SDK 原生开关：读取 LANGFUSE_TRACING_ENABLED 环境变量，为 false 时
+# 客户端整体进入 no-op 模式（start_observation 返回空对象，所有 update 自动跳过），
+# 因此 llm.py / rag/retriever.py 中的追踪代码无需任何改动。
+os.environ["LANGFUSE_TRACING_ENABLED"] = "true" if LANGFUSE_ENABLED else "false"

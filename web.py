@@ -74,38 +74,31 @@ _cached_models: list[dict] = []
 
 
 def _fetch_models():
-    """启动时从 API 获取可用模型列表。"""
-    global _cached_models
-    import httpx
-    try:
-        # API_URL 可能包含 /chat/completions 等路径，截取到 base url
-        base = config.API_URL.rstrip("/")
-        for suffix in ("/chat/completions", "/v1/chat/completions"):
-            if base.endswith(suffix):
-                base = base[:-len(suffix)]
-        models_url = f"{base.rstrip('/')}/models"
+    """启动时获取可用模型列表 + 连通性检查（单次请求）。
 
-        resp = httpx.get(
-            models_url,
-            headers={"Authorization": f"Bearer {config.API_KEY}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("data", [])
-        _cached_models = [
-            {
-                "id": m["id"],
-                "name": m["id"],
-                "provider": m.get("owned_by", ""),
-            }
-            for m in items
-        ]
-        # 按模型名排序
-        _cached_models.sort(key=lambda x: x["id"])
-        print(f"已加载 {_cached_models.__len__()} 个模型")
-    except Exception as e:
-        print(f"获取模型列表失败: {e}，使用空列表")
+    复用 llm.fetch_models()：一次 /models 请求同时完成连通性判定与列表拉取，
+    保留完整 item（前端需要 provider/owned_by 字段）。
+    失败时降级为空列表，不中止启动。
+    """
+    global _cached_models
+    import llm
+
+    ok, message, items = llm.fetch_models()
+    if not ok:
+        print(f"⚠️  LLM 连接检查失败\n  {message}\n  （服务继续启动，模型列表为空）")
+        return
+
+    _cached_models = [
+        {
+            "id": m["id"],
+            "name": m["id"],
+            "provider": m.get("owned_by", ""),
+        }
+        for m in items
+        if isinstance(m, dict) and m.get("id")
+    ]
+    _cached_models.sort(key=lambda x: x["id"])
+    print(f"✅ LLM 连接检查: {message}（已加载 {len(_cached_models)} 个模型）")
 
 
 # 启动时拉取

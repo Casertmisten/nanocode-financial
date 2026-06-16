@@ -19,6 +19,92 @@ _HEADERS = {
 _TIMEOUT = float(config.LLM_TIMEOUT)
 
 
+def get_api_base_url(url: str = config.API_URL) -> str:
+    """从 chat completions endpoint 反推 API base URL。
+
+    API_URL 经过规范化后形如 .../v1/chat/completions，
+    这里去掉 /chat/completions（及 /v1/chat/completions）后缀，返回 .../v1。
+    用于拼接 /models 等非 chat 端点。
+    """
+    base = url.rstrip("/")
+    for suffix in ("/chat/completions",):
+        if base.endswith(suffix):
+            base = base[: -len(suffix)]
+    return base.rstrip("/")
+
+
+def check_llm_connection() -> tuple[bool, str, list[str]]:
+    """启动时探测 LLM 是否可连通。
+
+    GET {base}/models 一次，返回 (ok, message, model_ids)：
+    - ok=True：连通且响应正常；message 含模型名校验结果。
+    - ok=False：message 给出分类后的中文原因（404/401/超时等），model_ids 为空。
+    超时设短（10s），不阻塞启动。
+
+    如需完整 item（含 owned_by 等字段），请改用 fetch_models()。
+    """
+    ok, message, items = fetch_models()
+    model_ids = [m.get("id", "") for m in items if m.get("id")]
+    return (ok, message, model_ids)
+
+
+def fetch_models() -> tuple[bool, str, list[dict]]:
+    """拉取 /models 完整 item 列表 + 连通性判定。
+
+    返回 (ok, message, items)：items 为 data 数组（含 id/owned_by 等原始字段）。
+    ok=False 时 items 为空，message 为分类后的中文原因。
+    """
+    base = get_api_base_url()
+    models_url = f"{base}/models"
+    try:
+        resp = httpx.get(
+            models_url,
+            headers={"Authorization": f"Bearer {config.API_KEY}"},
+            timeout=10.0,
+            proxy=None,
+        )
+    except httpx.TimeoutException:
+        return (False, f"连接超时（检查网络/代理）: {models_url}", [])
+    except httpx.ConnectError as e:
+        return (False, f"无法连接到 API 服务器（检查网络/代理）: {models_url}\n  {e}", [])
+    except httpx.HTTPError as e:
+        return (False, f"请求异常: {type(e).__name__}: {e}", [])
+
+    if resp.status_code == 404:
+        return (
+            False,
+            f"API 地址不正确（HTTP 404）: {models_url}\n"
+            "  请检查 ALI_API_URL 是否指向 .../v1 或 .../v1/chat/completions",
+            [],
+        )
+    if resp.status_code in (401, 403):
+        return (
+            False,
+            f"API Key 无效或无权限（HTTP {resp.status_code}）: {models_url}\n"
+            "  请检查 ALI_API_KEY 是否正确",
+            [],
+        )
+    if resp.status_code != 200:
+        return (False, f"HTTP {resp.status_code}: {models_url}", [])
+
+    try:
+        data = resp.json()
+    except Exception as e:
+        return (False, f"响应解析失败（非合法 JSON）: {e}", [])
+    items = data.get("data", []) if isinstance(data, dict) else []
+
+    # 校验配置的模型名是否在列表中（软警告，不影响 ok）
+    model_ids = [m.get("id", "") for m in items if isinstance(m, dict) and m.get("id")]
+    if config.MODEL and model_ids and config.MODEL not in model_ids:
+        return (
+            True,
+            f"连通正常，但配置的模型 {config.MODEL!r} 不在可用列表中（共 {len(model_ids)} 个）"
+            "——模型名可能拼错，LLM 调用时可能失败",
+            items,
+        )
+    return (True, f"连接正常，模型 {config.MODEL!r} 可用（共 {len(model_ids)} 个）", items)
+
+
 def _usage_to_langfuse(usage: dict | None) -> dict | None:
     """将 OpenAI 格式的 usage 转为 Langfuse 格式。"""
     if not usage:

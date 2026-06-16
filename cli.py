@@ -384,6 +384,17 @@ def main():
         f"{config.BOLD}nanocode-financial{config.RESET} | "
         f"{config.DIM}{config.MODEL} | {os.getcwd()}{config.RESET}\n"
     )
+
+    # 启动连通性检查（失败只打印警告，不中止）
+    import llm
+    ok, message, _ = llm.check_llm_connection()
+    if ok:
+        print(f"{config.GREEN}✅ LLM 连接检查: {message}{config.RESET}\n")
+    else:
+        print(f"{config.YELLOW}⚠️  LLM 连接检查失败{config.RESET}")
+        print(f"{config.YELLOW}  {message}{config.RESET}")
+        print(f"{config.YELLOW}  （服务继续启动，但 LLM 相关功能可能不可用）{config.RESET}\n")
+
     messages = []
     system_prompt = load_system_prompt()
     session_id = f"cli_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
