@@ -2,20 +2,31 @@
 
 import json
 from typing import AsyncIterator, Iterator
-
 import httpx
-
+from langfuse import get_client, observe
 import config
 from utils import BaseLogger
 from prompts.main_prompts import rewrite_queries_prompt
 
 log = BaseLogger.getLogger("llm")
 
+_langfuse = get_client()
+
 _HEADERS = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {config.API_KEY}",
 }
 _TIMEOUT = float(config.LLM_TIMEOUT)
+
+
+def _usage_to_langfuse(usage: dict | None) -> dict | None:
+    """将 OpenAI 格式的 usage 转为 Langfuse 格式。"""
+    if not usage:
+        return None
+    return {
+        "input": usage.get("prompt_tokens", 0),
+        "output": usage.get("completion_tokens", 0),
+    }
 
 
 def _build_body(
@@ -51,23 +62,33 @@ def stream_chat(
     """同步流式迭代器，用于 CLI。"""
     body = _build_body(messages, system_prompt, tools, model, stream=True)
     log.info("同步流式调用: model=%s, 消息数=%d", body["model"], len(messages))
-    with httpx.Client(timeout=_TIMEOUT, proxy=None) as client:
-        with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
-            resp.raise_for_status()
-            for line in resp.iter_lines():
-                if not line or not line.startswith("data: "):
-                    continue
-                payload = line[len("data: "):]
-                if payload.strip() == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(payload)
-                    # 流式响应的最后一个 chunk 通常携带 usage
-                    if usage_out is not None and chunk.get("usage"):
-                        usage_out.update(chunk["usage"])
-                    yield chunk
-                except json.JSONDecodeError:
-                    log.warning("SSE JSON 解析失败: %s", payload[:200])
+    obs = _langfuse.start_observation(
+        name="stream-chat",
+        as_type="generation",
+        model=body["model"],
+        input={"message_count": len(messages)},
+    )
+    try:
+        with httpx.Client(timeout=_TIMEOUT, proxy=None) as client:
+            with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    payload = line[len("data: "):]
+                    if payload.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(payload)
+                        # 流式响应的最后一个 chunk 通常携带 usage
+                        if usage_out is not None and chunk.get("usage"):
+                            usage_out.update(chunk["usage"])
+                        yield chunk
+                    except json.JSONDecodeError:
+                        log.warning("SSE JSON 解析失败: %s", payload[:200])
+        obs.update(output="(streamed)", usage_details=_usage_to_langfuse(usage_out))
+    finally:
+        obs.end()
 
 
 async def async_stream_chat(
@@ -82,25 +103,35 @@ async def async_stream_chat(
     # 构造请求体
     body = _build_body(messages, system_prompt, tools, model, stream=True, max_tokens=max_tokens)
     log.info("异步流式调用: model=%s, 消息数=%d", body["model"], len(messages))
-    log.info("请求体: %s", body)
-    async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=None) as client:
-        async with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line or not line.startswith("data: "):
-                    continue
-                payload = line[len("data: "):]
-                if payload.strip() == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(payload)
-                    if usage_out is not None and chunk.get("usage"):
-                        usage_out.update(chunk["usage"])
-                    yield chunk
-                except json.JSONDecodeError:
-                    log.warning("SSE JSON 解析失败: %s", payload[:200])
+    obs = _langfuse.start_observation(
+        name="async-stream-chat",
+        as_type="generation",
+        model=body["model"],
+        input={"message_count": len(messages)},
+    )
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, proxy=None) as client:
+            async with client.stream("POST", config.API_URL, headers=_HEADERS, json=body) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data: "):
+                        continue
+                    payload = line[len("data: "):]
+                    if payload.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(payload)
+                        if usage_out is not None and chunk.get("usage"):
+                            usage_out.update(chunk["usage"])
+                        yield chunk
+                    except json.JSONDecodeError:
+                        log.warning("SSE JSON 解析失败: %s", payload[:200])
+        obs.update(output="(streamed)", usage_details=_usage_to_langfuse(usage_out))
+    finally:
+        obs.end()
 
 
+@observe(as_type="generation", name="rewrite-queries", capture_input=False)
 def rewrite_queries(
     question: str,
     n: int = 3,
@@ -121,17 +152,25 @@ def rewrite_queries(
     resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=30.0, proxy=None)
     resp.raise_for_status()
     data = resp.json()
-    if usage_out is not None and "usage" in data:
-        usage_out.update(data["usage"])
+    usage = data.get("usage")
+    if usage_out is not None and usage:
+        usage_out.update(usage)
     content = data["choices"][0]["message"]["content"]
     variants = [line.strip() for line in content.strip().split("\n") if line.strip()]
     import re
     cleaned = [re.sub(r"^\d+[\.\)、]\s*", "", v) for v in variants]
     log.info("查询改写完成: 生成 %d 个变体", len(cleaned))
     log.info("改写后的查询：%s", cleaned[:n])
+    _langfuse.update_current_generation(
+        input={"question": question, "n": n},
+        output=cleaned[:n],
+        model=body["model"],
+        usage_details=_usage_to_langfuse(usage),
+    )
     return cleaned[:n]
 
 
+@observe(as_type="generation", name="call-llm", capture_input=False)
 def call_llm(
     system_prompt: str,
     user_content: str,
@@ -154,13 +193,21 @@ def call_llm(
     resp = httpx.post(config.API_URL, headers=_HEADERS, json=body, timeout=_TIMEOUT, proxy=None)
     resp.raise_for_status()
     data = resp.json()
-    if usage_out is not None and "usage" in data:
-        usage_out.update(data["usage"])
+    usage = data.get("usage")
+    if usage_out is not None and usage:
+        usage_out.update(usage)
     content = data["choices"][0]["message"]["content"]
     log.info("同步调用完成: 响应长度=%d", len(content))
+    _langfuse.update_current_generation(
+        input={"content_length": len(user_content)},
+        output=content[:500],
+        model=body["model"],
+        usage_details=_usage_to_langfuse(usage),
+    )
     return content
 
 
+@observe(as_type="generation", name="async-call-llm", capture_input=False)
 async def async_call_llm(
     system_prompt: str,
     user_content: str,
@@ -181,13 +228,21 @@ async def async_call_llm(
         resp = await client.post(config.API_URL, headers=_HEADERS, json=body)
         resp.raise_for_status()
         data = resp.json()
-        if usage_out is not None and "usage" in data:
-            usage_out.update(data["usage"])
+        usage = data.get("usage")
+        if usage_out is not None and usage:
+            usage_out.update(usage)
         content = data["choices"][0]["message"]["content"]
         log.info("异步调用完成: 响应长度=%d", len(content))
+        _langfuse.update_current_generation(
+            input={"content_length": len(user_content)},
+            output=content[:500],
+            model=body["model"],
+            usage_details=_usage_to_langfuse(usage),
+        )
         return content
 
 
+@observe(as_type="generation", name="async-stream-llm", capture_input=False)
 async def async_stream_llm(
     system_prompt: str,
     user_content: str,
@@ -221,4 +276,9 @@ async def async_stream_llm(
                     pass
     full = "".join(content_parts)
     log.info("异步流式调用完成: 响应长度=%d", len(full))
+    _langfuse.update_current_generation(
+        input={"content_length": len(user_content)},
+        output=full[:500],
+        model=body["model"],
+    )
     return full

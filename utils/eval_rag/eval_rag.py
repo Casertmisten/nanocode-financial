@@ -10,7 +10,22 @@ import urllib.error
 
 import asyncio
 from openai import AsyncOpenAI
+from types import ModuleType
+
+# 1. 强制在内存中伪造缺失的 vertexai 模块，彻底拦截 ModuleNotFoundError
+if 'langchain_community.chat_models.vertexai' not in sys.modules:
+    # 伪造外层 chat_models 模块
+    if 'langchain_community.chat_models' not in sys.modules:
+        sys.modules['langchain_community.chat_models'] = ModuleType('chat_models')
+    
+    # 伪造里层 vertexai 模块并挂载一个空的 ChatVertexAI 类
+    mock_vertex = ModuleType('vertexai')
+    mock_vertex.ChatVertexAI = object
+    
+    # 注册到系统模块中，欺骗接下来的 ragas 导入
+    sys.modules['langchain_community.chat_models.vertexai'] = mock_vertex
 from ragas.metrics.collections.faithfulness import Faithfulness
+from ragas.metrics.collections.answer_correctness import AnswerCorrectness
 from ragas.metrics.collections.answer_relevancy import AnswerRelevancy
 from ragas.metrics.collections.context_recall import ContextRecall
 from ragas.llms import llm_factory
@@ -35,7 +50,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 EVAL_LLM_BASE_URL = os.environ.get("LOCAL_API_URL", "")
 EVAL_LLM_API_KEY = os.environ.get("LOCAL_API_KEY", "")
-EVAL_LLM_MODEL = os.environ.get("LOCAL_MODEL", "qwen3.5-plus")
+EVAL_LLM_MODEL = os.environ.get("LOCAL_MODEL")
 
 EVAL_EMBED_BASE_URL = os.environ.get("EVAL_EMBED_BASE_URL", config.EMBEDDING_API_URL)
 EVAL_EMBED_API_KEY = os.environ.get("EVAL_EMBED_API_KEY", config.EMBEDDING_API_KEY)
@@ -58,7 +73,7 @@ def evaluator_llm_client():
         provider="openai",
         client=client,
         temperature=0.5,
-        max_tokens=8192,
+        max_tokens=20000,
         n=3,
         extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
@@ -98,9 +113,8 @@ def call_rag_system(question: str) -> dict:
     # 生成回答
     context_text = "\n\n".join(retrieved_contexts)
     prompt = (
-        "请严格基于参考资料回答问题，不允许编造。"
-        "如果资料中没有答案，直接回答不知道。"
-        "回答必须简洁准确，以 JSON 格式输出，键名为 answer。\n\n"
+        "你是一个金融金融知识问答助手，请严格基于参考资料回答问题，不允许编造。"
+        "回答应简洁、结构化、重点突出，以 JSON 格式输出，键名为 answer。\n\n"
         f"参考资料：\n{context_text}\n\n"
         f"问题：\n{question}"
     )
@@ -240,6 +254,7 @@ def run_evaluation(dataset_path: str = "rag_eval_dataset.jsonl"):
 
     faithfulness = Faithfulness(llm=evaluator_llm)
     answer_relevancy = AnswerRelevancy(llm=evaluator_llm, embeddings=evaluator_embeddings)
+    answer_correctness = AnswerCorrectness(llm=evaluator_llm, weights=[1.0, 0.0])
     context_recall = ContextRecall(llm=evaluator_llm)
 
     print(f"\n{'=' * 60}\n开始 RAGAS 评估\n{'=' * 60}")
@@ -257,6 +272,7 @@ def run_evaluation(dataset_path: str = "rag_eval_dataset.jsonl"):
             for name, metric, keys in [
                 ("faithfulness", faithfulness, ("user_input", "response", "retrieved_contexts")),
                 ("answer_relevancy", answer_relevancy, ("user_input", "response")),
+                ("answer_correctness", answer_correctness, ("user_input", "response", "reference")),
                 ("context_recall", context_recall, ("user_input", "retrieved_contexts", "reference")),
             ]:
                 try:
@@ -268,7 +284,7 @@ def run_evaluation(dataset_path: str = "rag_eval_dataset.jsonl"):
                     row[name] = float("nan")
 
             results.append(row)
-            print(f"\r  [{i + 1}/{len(samples)}] faithfulness={row['faithfulness']:.4f}  answer_relevancy={row['answer_relevancy']:.4f}  context_recall={row['context_recall']:.4f}", end="", flush=True)
+            print(f"\r  [{i + 1}/{len(samples)}] faithfulness={row['faithfulness']:.4f}  answer_relevancy={row['answer_relevancy']:.4f}  answer_correctness={row['answer_correctness']:.4f}  context_recall={row['context_recall']:.4f}", end="", flush=True)
 
         print()
         return results
@@ -281,7 +297,7 @@ def run_evaluation(dataset_path: str = "rag_eval_dataset.jsonl"):
 
     # 平均分
     print("\n各指标平均分：")
-    for col in ("faithfulness", "answer_relevancy", "context_recall"):
+    for col in ("faithfulness", "answer_relevancy", "answer_correctness", "context_recall"):
         try:
             print(f"  {col}: {df[col].dropna().mean():.4f}")
         except Exception:

@@ -3,7 +3,7 @@ Markdown: 先按标题层级切出大 chunk（父），再用句子分割切成�
 """
 
 import config
-from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter
+from llama_index.core.node_parser import MarkdownNodeParser, SentenceSplitter, SemanticSplitterNodeParser
 
 # 父 chunk 超长时的兜底字符阈值
 _MAX_PARENT_CHARS = 3000
@@ -40,14 +40,19 @@ def split_documents(
 
     # 父 chunk 兜底分割器（超大段落进一步拆分）
     parent_splitter = SentenceSplitter(
-        chunk_size=config.PARENT_CHUNK_SIZE,
-        chunk_overlap=config.PARENT_CHUNK_OVERLAP,
+        chunk_size=config.PARENT_CHUNK_SIZE, #  1000
+        chunk_overlap=config.PARENT_CHUNK_OVERLAP, #  100
     )
 
-    # 子 chunk 分割器（句子级）
-    child_splitter = SentenceSplitter(
-        chunk_size=config.CHILD_CHUNK_SIZE,
-        chunk_overlap=config.CHILD_CHUNK_OVERLAP,
+    # 子 chunk 分割器（语义块）
+    if embed_model is None:
+        raise ValueError("SemanticSplitterNodeParser 需要 embed_model，请传入嵌入模型")
+    child_splitter = SemanticSplitterNodeParser(
+        embed_model=embed_model,
+        buffer_size=1,
+        breakpoint_percentile_threshold=88,
+        chunk_size=config.CHILD_CHUNK_SIZE, # 200
+        chunk_overlap=config.CHILD_CHUNK_OVERLAP, # 20
     )
 
     # 非 Markdown 分块器

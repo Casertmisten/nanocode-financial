@@ -11,12 +11,14 @@ import urllib.request
 import jieba
 import numpy as np
 import config
+from langfuse import get_client, observe
 from rank_bm25 import BM25Okapi
 
 from llama_index.core.retrievers import VectorIndexRetriever
 from utils import BaseLogger
 
 log = BaseLogger.getLogger("rag.retriever")
+_langfuse = get_client()
 
 
 def _load_parent_map() -> dict:
@@ -128,6 +130,7 @@ def _map_to_parents(results: list[dict]) -> list[dict]:
     return final
 
 
+@observe(as_type="span", name="rerank", capture_input=False)
 def _rerank(query: str, documents: list[str], top_n: int) -> list[dict]:
     """调用本地 reranker API。成功返回排序结果，失败返回空列表。"""
     if not config.RERANK_API_URL:
@@ -146,12 +149,17 @@ def _rerank(query: str, documents: list[str], top_n: int) -> list[dict]:
         with urllib.request.urlopen(req, timeout=10) as resp:
             results = json.loads(resp.read().decode())
             log.info("Rerank 成功: 输入=%d, 输出=%d", len(documents), len(results))
+            _langfuse.update_current_span(
+                input={"query": query[:100], "doc_count": len(documents), "top_n": top_n},
+                output={"result_count": len(results), "top_scores": [r.get("score", 0) for r in results[:5]]},
+            )
             return results
     except Exception:
         log.warning("Reranker 调用失败，降级使用混合分数", exc_info=True)
         return []
 
 
+@observe(as_type="span", name="rag-retrieve", capture_input=False)
 async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list[str] | None = None, queries: list[str] | None = None) -> list[dict]:
     """异步并行混合检索 + RRF 融合 + Rerank。
 
@@ -159,11 +167,15 @@ async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list
     2. BM25 召回 top 200
     3. 向量 + BM25 结果 RRF 融合，取 top 50
     4. Reranker 精排输出 top_k（默认 20）；无 reranker 时直接用融合分数取 top_k
+    5. 父 chunk 映射（有 parent_id 的子 chunk → 替换为父 chunk 文本）
 
     file_paths: 若提供，仅返回这些文件路径下的结果（匹配 ChromaDB file_name 元数据）。
     queries: 若提供，异步并行向量召回（含原问题）；否则仅用 question 单路召回。
     """
     log.info("检索开始: question=%s, top_k=%d, queries=%d", question[:50], top_k, len(queries) if queries else 1)
+    _langfuse.update_current_span(
+        input={"question": question[:200], "top_k": top_k, "query_count": len(queries) if queries else 1},
+    )
 
     vec_queries = queries or [question]
 
@@ -217,6 +229,10 @@ async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list
     # Rerank：取 top 50 进入精排
     candidate_ids = sorted_ids[:_RERANK_TOP]
     candidate_docs = [id_to_text.get(nid, "") for nid in candidate_ids]
+    pre_rerank_preview = [
+        {"index": i, "source": id_to_source.get(nid, ""), "text": text[:1000]}
+        for i, (nid, text) in enumerate(zip(candidate_ids, candidate_docs))
+    ]
     rerank_results = _rerank(question, candidate_docs, top_n=top_k)
 
     if rerank_results:
@@ -232,7 +248,32 @@ async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list
                     "parent_id": id_to_parent_id.get(nid, ""),
                 })
         log.info("Rerank 检索完成: %d 条子 chunk", len(results))
-        return _map_to_parents(results)
+        # 记录 rerank 后的子 chunk（映射前）
+        child_preview = [
+            {"source": r["source"], "score": r["score"], "text": r["text"][:200], "parent_id": r.get("parent_id", "")}
+            for r in results[:10]
+        ]
+        # 父 chunk 映射
+        final = _map_to_parents(results)
+        # 记录父 chunk 映射后的最终结果
+        parent_preview = [
+            {"source": r["source"], "score": r["score"], "text": r["text"][:200]}
+            for r in final[:10]
+        ]
+        _langfuse.update_current_span(output={
+            "recall_count": len(all_vector_results) + len(bm25_results),
+            "fused_count": len(fused),
+            "reranked": True,
+            "child_count": len(results),
+            "result_count": len(final),
+            "sources": [r["source"] for r in final[:5]],
+            "scores": [r["score"] for r in final],
+        }, metadata={
+            "pre_rerank_candidates": pre_rerank_preview,
+            "post_rerank_children": child_preview,
+            "final_parent_chunks": parent_preview,
+        })
+        return final
 
     # 无 reranker，用融合分数
     results = []
@@ -244,7 +285,16 @@ async def async_retrieve(index, question: str, top_k: int = 20, file_paths: list
             "parent_id": id_to_parent_id.get(nid, ""),
         })
     log.info("混合检索完成（无 rerank）: %d 条子 chunk", len(results))
-    return _map_to_parents(results)
+    final = _map_to_parents(results)
+    _langfuse.update_current_span(output={
+        "recall_count": len(all_vector_results) + len(bm25_results),
+        "fused_count": len(fused),
+        "reranked": False,
+        "result_count": len(final),
+        "sources": [r["source"] for r in final[:5]],
+        "scores": [r["score"] for r in final],
+    })
+    return final
 
 
 def retrieve(index, question: str, top_k: int = 5, file_paths: list[str] | None = None, queries: list[str] | None = None) -> list[dict]:

@@ -117,3 +117,10 @@ BLUE, CYAN, GREEN, YELLOW, RED = (
     "\033[33m",
     "\033[31m",
 )
+
+# --- langfuse ---
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_BASE_URL = os.environ.get("LANGFUSE_BASE_URL", "https://api.langfuse.com")
+# Langfuse SDK 读取 LANGFUSE_HOST 环境变量
+os.environ.setdefault("LANGFUSE_HOST", LANGFUSE_BASE_URL)
