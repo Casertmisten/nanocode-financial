@@ -1,9 +1,24 @@
+# 环境与密钥
 .env
+
+# Python
 __pycache__/
 *.pyc
 /.venv
 
+# 运行时产物
 .ingested.json
-
 /data
 
+# Claude Code / superpowers 本地文件
+.claude/settings.local.json
+.claude/worktrees/
+.claude/skills/
+.agents/
+skills-lock.json
+
+# 编辑器/系统产物
+.DS_Store
+*.log
+.idea/
+.vscode/
